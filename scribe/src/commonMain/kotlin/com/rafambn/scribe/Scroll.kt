@@ -11,7 +11,7 @@ import kotlinx.serialization.serializerOrNull
 import kotlin.reflect.typeOf
 
 class Scroll(
-    val id: Int,
+    val id: String,
     val context: Scribe,
     private val startedAtEpochMs: Long,
 ) {

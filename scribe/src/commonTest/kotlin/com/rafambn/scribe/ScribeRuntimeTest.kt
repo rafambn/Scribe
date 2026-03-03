@@ -179,13 +179,42 @@ class ScribeRuntimeTest {
     }
 
     @Test
-    fun generated_scroll_ids_are_unique_ints() {
+    fun generated_scroll_ids_are_unique_uuid_strings() {
         val shelf = RecordingShelf()
         val scribe = Scribe(shelf)
         val ids = (1..500).map { scribe.startScroll().id }
 
         assertEquals(ids.size, ids.toSet().size)
-        assertTrue(ids.all { it > 0 })
+        assertTrue(ids.all { UUID_REGEX.matches(it) })
+    }
+
+    @Test
+    fun startScroll_uses_custom_id() {
+        val shelf = RecordingShelf()
+        val scribe = Scribe(shelf)
+        val scroll = scribe.startScroll(id = "session-42")
+
+        runSuspend {
+            scroll.putString("operation", "sync")
+            scroll.seal()
+        }
+
+        val event = shelf.events.single()
+        assertEquals("session-42", scroll.id)
+        assertEquals("session-42", event.scrollId)
+    }
+
+    @Test
+    fun startScroll_throws_when_custom_id_already_exists() {
+        val shelf = RecordingShelf()
+        val scribe = Scribe(shelf)
+        scribe.startScroll(id = "session-42")
+
+        val thrown = assertFailsWith<IllegalArgumentException> {
+            scribe.startScroll(id = "session-42")
+        }
+
+        assertEquals("A scroll with id 'session-42' already exists.", thrown.message)
     }
 
     @Test
@@ -234,6 +263,21 @@ class ScribeRuntimeTest {
         assertFalse(event.success)
         assertEquals("gateway failed", event.errorMessage)
         assertEquals(JsonPrimitive("checkout"), event.data["operation"])
+    }
+
+    @Test
+    fun captureScroll_accepts_custom_id() {
+        val shelf = RecordingShelf()
+        val scribe = Scribe(shelf)
+
+        runSuspend {
+            scribe.captureScroll(id = "flow-mobile-1") {
+                putString("operation", "checkout")
+            }
+        }
+
+        val event = shelf.events.single()
+        assertEquals("flow-mobile-1", event.scrollId)
     }
 
     @Test
@@ -287,6 +331,9 @@ class ScribeRuntimeTest {
     }
 
 }
+
+private val UUID_REGEX =
+    Regex("^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$")
 
 private fun <T> runSuspend(block: suspend () -> T): T {
     var outcome: Result<T>? = null

@@ -3,7 +3,7 @@ package com.rafambn.scribe
 import kotlinx.serialization.json.JsonElement
 
 data class SealedScrollEvent(
-    val scrollId: Int,
+    val scrollId: String,
     val success: Boolean,
     val errorMessage: String?,
     val data: Map<String, JsonElement>,
