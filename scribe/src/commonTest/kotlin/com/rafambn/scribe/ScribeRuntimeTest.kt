@@ -341,49 +341,12 @@ class ScribeRuntimeTest {
     }
 
     @Test
-    fun scribe_info_emits_info_note_with_scroll_id() {
-        val shelf = RecordingShelf()
-        val scribe = Scribe(listOf(shelf))
-        val scroll = scribe.startScroll()
-
-        runSuspend {
-            scribe.info("charging card", scrollId = scroll.id)
-            scroll.seal()
-            scribe.flush()
-        }
-
-        assertEquals(1, shelf.notes.size)
-        val note = shelf.notes.single()
-        assertEquals(ScribeNoteLevel.INFO, note.level)
-        assertEquals("charging card", note.message)
-        assertEquals(scroll.id, note.scrollId)
-    }
-
-    @Test
-    fun scribe_emits_all_note_levels() {
-        val shelf = RecordingShelf()
-        val scribe = Scribe(listOf(shelf))
-
-        scribe.debug("d")
-        scribe.info("i")
-        scribe.warn("w")
-        scribe.error("e")
-        runSuspend { scribe.flush() }
-
-        assertEquals(
-            listOf(ScribeNoteLevel.DEBUG, ScribeNoteLevel.INFO, ScribeNoteLevel.WARN, ScribeNoteLevel.ERROR),
-            shelf.notes.map { it.level },
-        )
-    }
-
-    @Test
-    fun events_and_notes_are_dispatched_to_multiple_sinks() {
+    fun events_are_dispatched_to_multiple_sinks() {
         val shelf1 = RecordingShelf()
         val shelf2 = RecordingShelf()
         val scribe = Scribe(listOf(shelf1, shelf2))
         val scroll = scribe.startScroll(id = "scroll-a")
 
-        scribe.info("starting", scrollId = "scroll-a")
         runSuspend {
             scroll.seal()
             scribe.flush()
@@ -391,10 +354,7 @@ class ScribeRuntimeTest {
 
         assertEquals(1, shelf1.events.size)
         assertEquals(1, shelf2.events.size)
-        assertEquals(1, shelf1.notes.size)
-        assertEquals(1, shelf2.notes.size)
         assertEquals("scroll-a", shelf1.events.single().scrollId)
-        assertEquals("starting", shelf2.notes.single().message)
     }
 
     @Test
@@ -402,7 +362,7 @@ class ScribeRuntimeTest {
         val gate = CompletableDeferred<Unit>()
         val shelf = BlockingShelf(gate)
         val scribe = Scribe(
-            shelves = listOf(shelf),
+            shelf = listOf(shelf),
             processConfig = ScribeProcessConfig(bufferSize = 4, overflowStrategy = BufferOverflow.DROP_OLDEST),
         )
         val scroll = scribe.startScroll(id = "slow")
@@ -422,7 +382,7 @@ class ScribeRuntimeTest {
         val gate = CompletableDeferred<Unit>()
         val shelf = BlockingShelf(gate)
         val scribe = Scribe(
-            shelves = listOf(shelf),
+            shelf = listOf(shelf),
             processConfig = ScribeProcessConfig(bufferSize = 1, overflowStrategy = BufferOverflow.DROP_LATEST),
         )
 
@@ -459,25 +419,20 @@ class ScribeRuntimeTest {
 
     private data class NonSerializableMeta(val retries: Int)
 
-    private class RecordingShelf : Shelf() {
-        val events = mutableListOf<SealedScrollEvent>()
-        val notes = mutableListOf<ScribeNoteEvent>()
+    private class RecordingShelf : Shelf {
+        val events = mutableListOf<SealedScroll>()
 
-        override suspend fun write(event: SealedScrollEvent) {
+        override suspend fun write(event: SealedScroll) {
             events += event
-        }
-
-        override suspend fun writeNote(event: ScribeNoteEvent) {
-            notes += event
         }
     }
 
     private class BlockingShelf(
         private val gate: CompletableDeferred<Unit>,
-    ) : Shelf() {
-        val events = mutableListOf<SealedScrollEvent>()
+    ) : Shelf {
+        val events = mutableListOf<SealedScroll>()
 
-        override suspend fun write(event: SealedScrollEvent) {
+        override suspend fun write(event: SealedScroll) {
             gate.await()
             events += event
         }

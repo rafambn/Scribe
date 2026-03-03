@@ -3,28 +3,31 @@ package com.rafambn.scribe
 import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.serialization.json.JsonElement
 
-data class SealedScrollEvent(
+sealed interface Record
+
+data class SealedScroll(
     val scrollId: String,
     val success: Boolean,
     val errorMessage: String?,
     val data: Map<String, JsonElement>,
     val startedAtEpochMs: Long,
     val sealedAtEpochMs: Long,
-)
+): Record
 
-enum class ScribeNoteLevel {
+data class Note(
+    val tag: String,
+    val message: String,
+    val level: LogLevel,
+    val timestamp: Long,
+): Record
+
+enum class LogLevel {
+    VERBOSE,
     DEBUG,
     INFO,
     WARN,
-    ERROR,
+    ERROR
 }
-
-data class ScribeNoteEvent(
-    val level: ScribeNoteLevel,
-    val message: String,
-    val scrollId: String?,
-    val createdAtEpochMs: Long,
-)
 
 data class ScribeProcessConfig(
     val bufferSize: Int = 256,

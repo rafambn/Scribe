@@ -13,12 +13,12 @@ import kotlinx.coroutines.selects.select
 import kotlinx.serialization.json.JsonElement
 
 class Scribe(
-    val shelves: List<Shelf>,
+    val shelf: List<Saver>,
     val contextData: MutableMap<String, JsonElement> = mutableMapOf(),
     val processConfig: ScribeProcessConfig = ScribeProcessConfig(),
 ) {
     private val scrollsById = mutableMapOf<String, Scroll>()
-    private val queue = Channel<DispatchMessage>(
+    private val queue = Channel<Record>(
         capacity = processConfig.bufferSize,
         onBufferOverflow = processConfig.overflowStrategy,
     )
@@ -27,28 +27,12 @@ class Scribe(
         while (isActive) {
             select {
                 queue.onReceive {
-                    when (it) {
-                        is DispatchMessage.ScrollMessage -> {
-                            shelves.forEach { shelf ->
-                                try {
-                                    shelf.write(it.event)
-                                } catch (_: Throwable) {
-                                    // Keep processing even if one sink fails.
-                                }
-                            }
+                    shelf.forEach { shelf ->
+                        try {
+                            shelf.write(it)
+                        } catch (_: Throwable) {
+                            // Keep processing even if one sink fails.
                         }
-
-                        is DispatchMessage.NoteMessage -> {
-                            shelves.forEach { shelf ->
-                                try {
-                                    shelf.writeNote(it.event)
-                                } catch (_: Throwable) {
-                                    // Keep processing even if one sink fails.
-                                }
-                            }
-                        }
-
-                        is DispatchMessage.FlushMessage -> it.done.complete(Unit)
                     }
                 }
             }
@@ -60,7 +44,7 @@ class Scribe(
 
     init {
         require(processConfig.bufferSize >= -2) { "BufferSize must be >= -2. Check Channel documentation" }
-        require(shelves.isNotEmpty()) { "At least one shelf is required." }
+        require(shelf.isNotEmpty()) { "At least one shelf is required." }
     }
 
     fun startScroll(id: String? = null): Scroll {
@@ -72,9 +56,11 @@ class Scribe(
                 }
                 generatedId
             }
+
             scrollsById.containsKey(id) -> {
                 throw IllegalArgumentException("A scroll with id '$id' already exists.")
             }
+
             else -> id
         }
 
@@ -88,33 +74,6 @@ class Scribe(
         return scroll
     }
 
-    fun debug(message: String, scrollId: String? = null) {
-        note(ScribeNoteLevel.DEBUG, message, scrollId)
-    }
-
-    fun info(message: String, scrollId: String? = null) {
-        note(ScribeNoteLevel.INFO, message, scrollId)
-    }
-
-    fun warn(message: String, scrollId: String? = null) {
-        note(ScribeNoteLevel.WARN, message, scrollId)
-    }
-
-    fun error(message: String, scrollId: String? = null) {
-        note(ScribeNoteLevel.ERROR, message, scrollId)
-    }
-
-    fun note(level: ScribeNoteLevel, message: String, scrollId: String? = null) {
-        DispatchMessage.NoteMessage(
-            ScribeNoteEvent(
-                level = level,
-                message = message,
-                scrollId = scrollId,
-                createdAtEpochMs = nowEpochMs(),
-            ),
-        )
-    }
-
     suspend inline fun <T> captureScroll(
         id: String? = null,
         block: suspend Scroll.() -> T,
@@ -123,27 +82,12 @@ class Scribe(
         return scroll.use(block)
     }
 
-    suspend fun flush() {
-        val done = CompletableDeferred<Unit>()
-        queue.send(DispatchMessage.FlushMessage(done))
-        done.await()
-    }
-
-    suspend fun close(flush: Boolean = true) {
-        if (flush) {
-            this.flush()
-        }
+    suspend fun close() {
         queue.close()
         processorJob.join()
     }
 
-    internal suspend fun write(event: SealedScrollEvent) {
-        queue.send(DispatchMessage.ScrollMessage(event))
+    internal suspend fun write(record: Record) {
+        queue.send(record)
     }
-}
-
-private sealed interface DispatchMessage {
-    data class ScrollMessage(val event: SealedScrollEvent) : DispatchMessage
-    data class NoteMessage(val event: ScribeNoteEvent) : DispatchMessage
-    data class FlushMessage(val done: CompletableDeferred<Unit>) : DispatchMessage
 }

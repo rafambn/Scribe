@@ -77,7 +77,7 @@ class Scroll(
         sealed = true
 
         context.write(
-            SealedScrollEvent(
+            SealedScroll(
                 scrollId = id,
                 success = success,
                 errorMessage = error?.message,

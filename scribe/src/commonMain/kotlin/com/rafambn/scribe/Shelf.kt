@@ -1,6 +1,5 @@
 package com.rafambn.scribe
 
-open class Shelf {
-    open suspend fun write(event: SealedScrollEvent) = Unit
-    open suspend fun writeNote(event: ScribeNoteEvent) = Unit
+fun interface Saver {
+    suspend fun write(event: Record)
 }
