@@ -18,7 +18,7 @@ class ScribeRuntimeTest {
     @Test
     fun startScroll_creates_scroll_for_the_given_shelf() {
         val shelf = RecordingShelf()
-        val scribe = Scribe(listOf(shelf))
+        val scribe = scribeWithScrollShelves(shelf)
         val scroll = scribe.startScroll()
 
         assertSame(scribe, scroll.context)
@@ -28,7 +28,7 @@ class ScribeRuntimeTest {
         runSuspend {
             scroll.put("method", "card")
             scroll.seal(success = true)
-            scribe.flush()
+            scribe.close()
         }
 
         assertEquals(1, shelf.events.size)
@@ -41,7 +41,7 @@ class ScribeRuntimeTest {
     @Test
     fun seal_is_idempotent_and_writes_once() {
         val shelf = RecordingShelf()
-        val scribe = Scribe(listOf(shelf))
+        val scribe = scribeWithScrollShelves(shelf)
         val scroll = scribe.startScroll()
 
         scroll.put("gateway", "stripe")
@@ -50,7 +50,7 @@ class ScribeRuntimeTest {
         runSuspend {
             scroll.seal(success = false, error = IllegalStateException("fail"))
             scroll.seal(success = true)
-            scribe.flush()
+            scribe.close()
         }
 
         assertTrue(scroll.isSealed)
@@ -66,7 +66,7 @@ class ScribeRuntimeTest {
     @Test
     fun two_explicit_scrolls_match_requested_flow() {
         val shelf = RecordingShelf()
-        val scribe = Scribe(listOf(shelf))
+        val scribe = scribeWithScrollShelves(shelf)
         val paymentService = PaymentService()
 
         val scroll1 = scribe.startScroll()
@@ -79,7 +79,7 @@ class ScribeRuntimeTest {
             }
             scroll1.seal(success = true)
             scroll2.seal(success = true)
-            scribe.flush()
+            scribe.close()
         }
 
         assertEquals(2, shelf.events.size)
@@ -104,13 +104,13 @@ class ScribeRuntimeTest {
     @Test
     fun putSerializable_stores_serializable_object_value() {
         val shelf = RecordingShelf()
-        val scribe = Scribe(listOf(shelf))
+        val scribe = scribeWithScrollShelves(shelf)
         val scroll = scribe.startScroll()
 
         runSuspend {
             scroll.put("meta", GatewayMeta(retries = 2))
             scroll.seal()
-            scribe.flush()
+            scribe.close()
         }
 
         val event = shelf.events.single()
@@ -120,7 +120,7 @@ class ScribeRuntimeTest {
     @Test
     fun put_helpers_store_json_safe_values() {
         val shelf = RecordingShelf()
-        val scribe = Scribe(listOf(shelf))
+        val scribe = scribeWithScrollShelves(shelf)
         val scroll = scribe.startScroll()
 
         runSuspend {
@@ -130,7 +130,7 @@ class ScribeRuntimeTest {
             scroll.putSerializable("meta", GatewayMeta(retries = 2))
             scroll.putObject("details", GatewayMeta(retries = 5))
             scroll.seal()
-            scribe.flush()
+            scribe.close()
         }
 
         val event = shelf.events.single()
@@ -144,7 +144,7 @@ class ScribeRuntimeTest {
     @Test
     fun put_throws_for_custom_object_without_serializer() {
         val shelf = RecordingShelf()
-        val scribe = Scribe(listOf(shelf))
+        val scribe = scribeWithScrollShelves(shelf)
         val scroll = scribe.startScroll()
 
         assertFailsWith<IllegalArgumentException> {
@@ -155,7 +155,7 @@ class ScribeRuntimeTest {
     @Test
     fun putObject_throws_for_non_object_json_values() {
         val shelf = RecordingShelf()
-        val scribe = Scribe(listOf(shelf))
+        val scribe = scribeWithScrollShelves(shelf)
         val scroll = scribe.startScroll()
 
         assertFailsWith<IllegalArgumentException> {
@@ -166,7 +166,7 @@ class ScribeRuntimeTest {
     @Test
     fun putNumber_throws_for_non_finite_values() {
         val shelf = RecordingShelf()
-        val scribe = Scribe(listOf(shelf))
+        val scribe = scribeWithScrollShelves(shelf)
         val scroll = scribe.startScroll()
 
         assertFailsWith<IllegalArgumentException> {
@@ -177,7 +177,7 @@ class ScribeRuntimeTest {
     @Test
     fun generated_scroll_ids_are_unique_uuid_strings() {
         val shelf = RecordingShelf()
-        val scribe = Scribe(listOf(shelf))
+        val scribe = scribeWithScrollShelves(shelf)
         val ids = (1..500).map { scribe.startScroll().id }
 
         assertEquals(ids.size, ids.toSet().size)
@@ -187,13 +187,13 @@ class ScribeRuntimeTest {
     @Test
     fun startScroll_uses_custom_id() {
         val shelf = RecordingShelf()
-        val scribe = Scribe(listOf(shelf))
+        val scribe = scribeWithScrollShelves(shelf)
         val scroll = scribe.startScroll(id = "session-42")
 
         runSuspend {
             scroll.putString("operation", "sync")
             scroll.seal()
-            scribe.flush()
+            scribe.close()
         }
 
         val event = shelf.events.single()
@@ -204,7 +204,7 @@ class ScribeRuntimeTest {
     @Test
     fun startScroll_throws_when_custom_id_already_exists() {
         val shelf = RecordingShelf()
-        val scribe = Scribe(listOf(shelf))
+        val scribe = scribeWithScrollShelves(shelf)
         scribe.startScroll(id = "session-42")
 
         val thrown = assertFailsWith<IllegalArgumentException> {
@@ -217,7 +217,7 @@ class ScribeRuntimeTest {
     @Test
     fun startScroll_includes_context_data_in_event() {
         val shelf = RecordingShelf()
-        val scribe = Scribe(listOf(shelf))
+        val scribe = scribeWithScrollShelves(shelf)
         scribe.contextData["service"] = JsonPrimitive("mobile-app")
         scribe.contextData["environment"] = JsonPrimitive("production")
 
@@ -225,7 +225,7 @@ class ScribeRuntimeTest {
 
         runSuspend {
             scroll.seal()
-            scribe.flush()
+            scribe.close()
         }
 
         val event = shelf.events.single()
@@ -236,7 +236,7 @@ class ScribeRuntimeTest {
     @Test
     fun startScroll_uses_context_snapshot_at_creation_time() {
         val shelf = RecordingShelf()
-        val scribe = Scribe(listOf(shelf))
+        val scribe = scribeWithScrollShelves(shelf)
         scribe.contextData["region"] = JsonPrimitive("us-east")
 
         val firstScroll = scribe.startScroll(id = "first")
@@ -246,7 +246,7 @@ class ScribeRuntimeTest {
         runSuspend {
             firstScroll.seal()
             secondScroll.seal()
-            scribe.flush()
+            scribe.close()
         }
 
         val firstEvent = shelf.events.firstOrNull { it.scrollId == "first" }
@@ -261,14 +261,14 @@ class ScribeRuntimeTest {
     @Test
     fun scroll_put_overrides_context_data_for_the_current_scroll() {
         val shelf = RecordingShelf()
-        val scribe = Scribe(listOf(shelf))
+        val scribe = scribeWithScrollShelves(shelf)
         scribe.contextData["region"] = JsonPrimitive("us-east")
         val scroll = scribe.startScroll()
 
         runSuspend {
             scroll.putString("region", "ap-south")
             scroll.seal()
-            scribe.flush()
+            scribe.close()
         }
 
         val event = shelf.events.single()
@@ -278,14 +278,14 @@ class ScribeRuntimeTest {
     @Test
     fun captureScroll_seals_successfully_and_returns_result() {
         val shelf = RecordingShelf()
-        val scribe = Scribe(listOf(shelf))
+        val scribe = scribeWithScrollShelves(shelf)
 
         val result = runSuspend {
             val value = scribe.captureScroll {
                 putString("operation", "checkout")
                 "ok"
             }
-            scribe.flush()
+            scribe.close()
             value
         }
 
@@ -303,7 +303,7 @@ class ScribeRuntimeTest {
     @Test
     fun captureScroll_seals_failure_and_rethrows() {
         val shelf = RecordingShelf()
-        val scribe = Scribe(listOf(shelf))
+        val scribe = scribeWithScrollShelves(shelf)
 
         val thrown = assertFailsWith<IllegalStateException> {
             runSuspend {
@@ -313,7 +313,7 @@ class ScribeRuntimeTest {
                 }
             }
         }
-        runSuspend { scribe.flush() }
+        runSuspend { scribe.close() }
 
         assertEquals("gateway failed", thrown.message)
         assertEquals(1, shelf.events.size)
@@ -327,13 +327,13 @@ class ScribeRuntimeTest {
     @Test
     fun captureScroll_accepts_custom_id() {
         val shelf = RecordingShelf()
-        val scribe = Scribe(listOf(shelf))
+        val scribe = scribeWithScrollShelves(shelf)
 
         runSuspend {
             scribe.captureScroll(id = "flow-mobile-1") {
                 putString("operation", "checkout")
             }
-            scribe.flush()
+            scribe.close()
         }
 
         val event = shelf.events.single()
@@ -344,12 +344,12 @@ class ScribeRuntimeTest {
     fun events_are_dispatched_to_multiple_sinks() {
         val shelf1 = RecordingShelf()
         val shelf2 = RecordingShelf()
-        val scribe = Scribe(listOf(shelf1, shelf2))
+        val scribe = scribeWithScrollShelves(shelf1, shelf2)
         val scroll = scribe.startScroll(id = "scroll-a")
 
         runSuspend {
             scroll.seal()
-            scribe.flush()
+            scribe.close()
         }
 
         assertEquals(1, shelf1.events.size)
@@ -358,11 +358,37 @@ class ScribeRuntimeTest {
     }
 
     @Test
+    fun routes_can_select_notes_scrolls_or_both() {
+        val scrollShelf = RecordingShelf()
+        val noteSaver = RecordingNoteSaver()
+        val allSaver = RecordingRecordSaver()
+        val scribe = Scribe(
+            shelf = listOf(
+                scrollShelf,
+                noteSaver,
+                allSaver,
+            ),
+        )
+
+        runSuspend {
+            scribe.note(tag = "payments", message = "started", level = LogLevel.INFO, timestamp = 100L)
+            scribe.startScroll(id = "scroll-1").seal()
+            scribe.close()
+        }
+
+        assertEquals(1, scrollShelf.events.size)
+        assertEquals(1, noteSaver.events.size)
+        assertEquals(2, allSaver.events.size)
+        assertTrue(allSaver.events.any { it is Note })
+        assertTrue(allSaver.events.any { it is SealedScroll })
+    }
+
+    @Test
     fun seal_does_not_block_when_sink_is_slow() {
         val gate = CompletableDeferred<Unit>()
         val shelf = BlockingShelf(gate)
-        val scribe = Scribe(
-            shelf = listOf(shelf),
+        val scribe = scribeWithScrollShelves(
+            shelf,
             processConfig = ScribeProcessConfig(bufferSize = 4, overflowStrategy = BufferOverflow.DROP_OLDEST),
         )
         val scroll = scribe.startScroll(id = "slow")
@@ -373,7 +399,7 @@ class ScribeRuntimeTest {
         assertEquals(0, shelf.events.size)
 
         gate.complete(Unit)
-        runSuspend { scribe.flush() }
+        runSuspend { scribe.close() }
         assertEquals(1, shelf.events.size)
     }
 
@@ -381,8 +407,8 @@ class ScribeRuntimeTest {
     fun drop_latest_overflow_can_drop_events_under_pressure() {
         val gate = CompletableDeferred<Unit>()
         val shelf = BlockingShelf(gate)
-        val scribe = Scribe(
-            shelf = listOf(shelf),
+        val scribe = scribeWithScrollShelves(
+            shelf,
             processConfig = ScribeProcessConfig(bufferSize = 1, overflowStrategy = BufferOverflow.DROP_LATEST),
         )
 
@@ -393,7 +419,7 @@ class ScribeRuntimeTest {
         }
 
         gate.complete(Unit)
-        runSuspend { scribe.flush() }
+        runSuspend { scribe.close() }
 
         assertFalse(shelf.events.any { it.scrollId == "three" })
     }
@@ -419,7 +445,7 @@ class ScribeRuntimeTest {
 
     private data class NonSerializableMeta(val retries: Int)
 
-    private class RecordingShelf : Shelf {
+    private class RecordingShelf : ScrollSaver {
         val events = mutableListOf<SealedScroll>()
 
         override suspend fun write(event: SealedScroll) {
@@ -429,7 +455,7 @@ class ScribeRuntimeTest {
 
     private class BlockingShelf(
         private val gate: CompletableDeferred<Unit>,
-    ) : Shelf {
+    ) : ScrollSaver {
         val events = mutableListOf<SealedScroll>()
 
         override suspend fun write(event: SealedScroll) {
@@ -437,9 +463,33 @@ class ScribeRuntimeTest {
             events += event
         }
     }
+
+    private class RecordingNoteSaver : NoteSaver {
+        val events = mutableListOf<Note>()
+
+        override suspend fun write(event: Note) {
+            events += event
+        }
+    }
+
+    private class RecordingRecordSaver : RecordSaver {
+        val events = mutableListOf<Record>()
+
+        override suspend fun write(event: Record) {
+            events += event
+        }
+    }
 }
 
 private val UUID_REGEX =
     Regex("^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$")
+
+private fun scribeWithScrollShelves(
+    vararg shelves: ScrollSaver,
+    processConfig: ScribeProcessConfig = ScribeProcessConfig(),
+): Scribe = Scribe(
+    shelf = shelves.toList(),
+    processConfig = processConfig,
+)
 
 private fun <T> runSuspend(block: suspend () -> T): T = runBlocking { block() }

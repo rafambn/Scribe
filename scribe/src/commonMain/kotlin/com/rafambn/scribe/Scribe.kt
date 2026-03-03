@@ -2,10 +2,10 @@ package com.rafambn.scribe
 
 import com.rafambn.scribe.internal.newScrollId
 import com.rafambn.scribe.internal.nowEpochMs
-import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
@@ -13,7 +13,7 @@ import kotlinx.coroutines.selects.select
 import kotlinx.serialization.json.JsonElement
 
 class Scribe(
-    val shelf: List<Saver>,
+    val shelf: List<Saver<*>>,
     val contextData: MutableMap<String, JsonElement> = mutableMapOf(),
     val processConfig: ScribeProcessConfig = ScribeProcessConfig(),
 ) {
@@ -26,10 +26,14 @@ class Scribe(
     private val processorJob = processScope.launch {
         while (isActive) {
             select {
-                queue.onReceive {
-                    shelf.forEach { shelf ->
+                queue.onReceive { record ->
+                    shelf.forEach { saver ->
                         try {
-                            shelf.write(it)
+                            when (saver) {
+                                is RecordSaver -> saver.write(record)
+                                is ScrollSaver if record is SealedScroll -> saver.write(record)
+                                is NoteSaver if record is Note -> saver.write(record)
+                            }
                         } catch (_: Throwable) {
                             // Keep processing even if one sink fails.
                         }
@@ -82,9 +86,26 @@ class Scribe(
         return scroll.use(block)
     }
 
+    suspend fun note(
+        tag: String,
+        message: String,
+        level: LogLevel = LogLevel.INFO,
+        timestamp: Long = nowEpochMs(),
+    ) {
+        write(
+            Note(
+                tag = tag,
+                message = message,
+                level = level,
+                timestamp = timestamp,
+            ),
+        )
+    }
+
     suspend fun close() {
         queue.close()
         processorJob.join()
+        processScope.cancel()
     }
 
     internal suspend fun write(record: Record) {
