@@ -26,6 +26,11 @@ class Scribe(
         return scroll
     }
 
+    suspend inline fun <T> captureScroll(block: suspend Scroll.() -> T): T {
+        val scroll = startScroll()
+        return scroll.use(block)
+    }
+
     internal suspend fun write(event: SealedScrollEvent) {
         shelf.write(event)
     }

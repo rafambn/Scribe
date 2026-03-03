@@ -62,6 +62,21 @@ class Scroll(
         notes += message
     }
 
+    suspend inline fun <T> use(block: suspend Scroll.() -> T): T {
+        return try {
+            val result = block()
+            seal(success = true)
+            result
+        } catch (t: Throwable) {
+            try {
+                seal(success = false, error = t)
+            } catch (sealError: Throwable) {
+                t.addSuppressed(sealError)
+            }
+            throw t
+        }
+    }
+
     suspend fun seal(success: Boolean = true, error: Throwable? = null) {
         if (sealed) return
         sealed = true

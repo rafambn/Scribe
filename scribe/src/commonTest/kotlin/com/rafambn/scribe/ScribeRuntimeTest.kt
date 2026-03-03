@@ -188,6 +188,74 @@ class ScribeRuntimeTest {
         assertTrue(ids.all { it > 0 })
     }
 
+    @Test
+    fun captureScroll_seals_successfully_and_returns_result() {
+        val shelf = RecordingShelf()
+        val scribe = Scribe(shelf)
+
+        val result = runSuspend {
+            scribe.captureScroll {
+                putString("operation", "checkout")
+                footnote("done")
+                "ok"
+            }
+        }
+
+        assertEquals("ok", result)
+        assertEquals(1, shelf.events.size)
+        assertEquals(1, scribe.scrolls.size)
+        assertTrue(scribe.scrolls.single().isSealed)
+
+        val event = shelf.events.single()
+        assertTrue(event.success)
+        assertEquals(null, event.errorMessage)
+        assertEquals(JsonPrimitive("checkout"), event.data["operation"])
+        assertEquals(listOf("done"), event.footnotes)
+    }
+
+    @Test
+    fun captureScroll_seals_failure_and_rethrows() {
+        val shelf = RecordingShelf()
+        val scribe = Scribe(shelf)
+
+        val thrown = assertFailsWith<IllegalStateException> {
+            runSuspend {
+                scribe.captureScroll {
+                    putString("operation", "checkout")
+                    throw IllegalStateException("gateway failed")
+                }
+            }
+        }
+
+        assertEquals("gateway failed", thrown.message)
+        assertEquals(1, shelf.events.size)
+
+        val event = shelf.events.single()
+        assertFalse(event.success)
+        assertEquals("gateway failed", event.errorMessage)
+        assertEquals(JsonPrimitive("checkout"), event.data["operation"])
+    }
+
+    @Test
+    fun scroll_use_preserves_manual_seal_event() {
+        val shelf = RecordingShelf()
+        val scribe = Scribe(shelf)
+        val scroll = scribe.startScroll()
+
+        runSuspend {
+            scroll.use {
+                putString("stage", "manual")
+                seal(success = false, error = IllegalStateException("manual failure"))
+            }
+        }
+
+        assertEquals(1, shelf.events.size)
+        val event = shelf.events.single()
+        assertFalse(event.success)
+        assertEquals("manual failure", event.errorMessage)
+        assertEquals(JsonPrimitive("manual"), event.data["stage"])
+    }
+
     private class PaymentService {
         suspend fun pay(orderId: String, scroll: Scroll) {
             try {
