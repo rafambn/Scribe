@@ -17,7 +17,6 @@ class Scroll(
     private val startedAtEpochMs: Long,
 ) {
     private val data = initialData.toMutableMap()
-    private val notes = mutableListOf<String>()
     private var sealed: Boolean = false
 
     val isSealed: Boolean
@@ -58,11 +57,6 @@ class Scroll(
         putSerializable(key, value)
     }
 
-    fun footnote(message: String) {
-        if (sealed) return
-        notes += message
-    }
-
     suspend inline fun <T> use(block: suspend Scroll.() -> T): T {
         return try {
             val result = block()
@@ -88,7 +82,6 @@ class Scroll(
                 success = success,
                 errorMessage = error?.message,
                 data = data.toMap(),
-                footnotes = notes.toList(),
                 startedAtEpochMs = startedAtEpochMs,
                 sealedAtEpochMs = nowEpochMs(),
             ),
