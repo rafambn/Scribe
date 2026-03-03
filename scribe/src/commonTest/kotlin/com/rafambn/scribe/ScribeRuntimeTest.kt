@@ -4,11 +4,13 @@ import kotlin.coroutines.Continuation
 import kotlin.coroutines.EmptyCoroutineContext
 import kotlin.coroutines.startCoroutine
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
-import kotlin.test.assertNotNull
 import kotlin.test.assertFailsWith
+import kotlin.test.assertNotNull
 import kotlin.test.assertSame
 import kotlin.test.assertTrue
 
@@ -32,7 +34,7 @@ class ScribeRuntimeTest {
         assertEquals(1, shelf.events.size)
         val event = shelf.events.single()
         assertEquals(scroll.id, event.scrollId)
-        assertEquals("card", event.data["method"])
+        assertEquals(JsonPrimitive("card"), event.data["method"])
         assertEquals(listOf("processing payment"), event.footnotes)
         assertTrue(event.success)
     }
@@ -59,7 +61,7 @@ class ScribeRuntimeTest {
         assertEquals(scroll.id, event.scrollId)
         assertEquals(false, event.success)
         assertEquals("fail", event.errorMessage)
-        assertEquals("stripe", event.data["gateway"])
+        assertEquals(JsonPrimitive("stripe"), event.data["gateway"])
         assertEquals(listOf("charging card"), event.footnotes)
     }
 
@@ -94,13 +96,13 @@ class ScribeRuntimeTest {
 
         assertTrue(successEvent.success)
         assertEquals(null, successEvent.errorMessage)
-        assertEquals(scroll1.id, successEvent.data["scrollId"])
-        assertEquals("stripe", successEvent.data["gateway"])
+        assertEquals(JsonPrimitive(scroll1.id), successEvent.data["scrollId"])
+        assertEquals(JsonPrimitive("stripe"), successEvent.data["gateway"])
         assertEquals(listOf("charging card"), successEvent.footnotes)
 
         assertFalse(failureEvent.success)
-        assertEquals(scroll2.id, failureEvent.data["scrollId"])
-        assertEquals("gateway_call", failureEvent.data["error_stage"])
+        assertEquals(JsonPrimitive(scroll2.id), failureEvent.data["scrollId"])
+        assertEquals(JsonPrimitive("gateway_call"), failureEvent.data["error_stage"])
         assertEquals("order2 failed", failureEvent.errorMessage)
         assertEquals(listOf("charging card"), failureEvent.footnotes)
     }
@@ -117,7 +119,30 @@ class ScribeRuntimeTest {
         }
 
         val event = shelf.events.single()
-        assertEquals(GatewayMeta(retries = 2), event.data["meta"])
+        assertEquals(JsonObject(mapOf("retries" to JsonPrimitive(2))), event.data["meta"])
+    }
+
+    @Test
+    fun put_helpers_store_json_safe_values() {
+        val shelf = RecordingShelf()
+        val scribe = Scribe(shelf)
+        val scroll = scribe.startScroll()
+
+        runSuspend {
+            scroll.putString("message", "accepted")
+            scroll.putNumber("attempt", 3)
+            scroll.putBoolean("retry", false)
+            scroll.putSerializable("meta", GatewayMeta(retries = 2))
+            scroll.putObject("details", GatewayMeta(retries = 5))
+            scroll.seal()
+        }
+
+        val event = shelf.events.single()
+        assertEquals(JsonPrimitive("accepted"), event.data["message"])
+        assertEquals(JsonPrimitive(3), event.data["attempt"])
+        assertEquals(JsonPrimitive(false), event.data["retry"])
+        assertEquals(JsonObject(mapOf("retries" to JsonPrimitive(2))), event.data["meta"])
+        assertEquals(JsonObject(mapOf("retries" to JsonPrimitive(5))), event.data["details"])
     }
 
     @Test
@@ -128,6 +153,28 @@ class ScribeRuntimeTest {
 
         assertFailsWith<IllegalArgumentException> {
             scroll.put("meta", NonSerializableMeta(retries = 2))
+        }
+    }
+
+    @Test
+    fun putObject_throws_for_non_object_json_values() {
+        val shelf = RecordingShelf()
+        val scribe = Scribe(shelf)
+        val scroll = scribe.startScroll()
+
+        assertFailsWith<IllegalArgumentException> {
+            scroll.putObject("attempt", 2)
+        }
+    }
+
+    @Test
+    fun putNumber_throws_for_non_finite_values() {
+        val shelf = RecordingShelf()
+        val scribe = Scribe(shelf)
+        val scroll = scribe.startScroll()
+
+        assertFailsWith<IllegalArgumentException> {
+            scroll.putNumber("latency_ms", Double.NaN)
         }
     }
 

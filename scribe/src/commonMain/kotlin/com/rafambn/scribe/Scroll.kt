@@ -2,6 +2,11 @@ package com.rafambn.scribe
 
 import com.rafambn.scribe.internal.nowEpochMs
 import kotlinx.serialization.ExperimentalSerializationApi
+import kotlinx.serialization.KSerializer
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.serializerOrNull
 import kotlin.reflect.typeOf
 
@@ -10,17 +15,46 @@ class Scroll(
     val context: Scribe,
     private val startedAtEpochMs: Long,
 ) {
-    private val data = mutableMapOf<String, Any>()
+    private val data = mutableMapOf<String, JsonElement>()
     private val notes = mutableListOf<String>()
     private var sealed: Boolean = false
 
     val isSealed: Boolean
         get() = sealed
 
+    fun putString(key: String, value: String) {
+        putResolved(key, JsonPrimitive(value))
+    }
+
+    fun putNumber(key: String, value: Number) {
+        ensureFinite(key, value)
+        putResolved(key, JsonPrimitive(value))
+    }
+
+    fun putBoolean(key: String, value: Boolean) {
+        putResolved(key, JsonPrimitive(value))
+    }
+
+    @OptIn(ExperimentalSerializationApi::class)
+    inline fun <reified T : Any> putSerializable(key: String, value: T) {
+        val serializer = serializerOrThrow<T>(key)
+        putResolved(key, Json.encodeToJsonElement(serializer, value))
+    }
+
+    @OptIn(ExperimentalSerializationApi::class)
+    inline fun <reified T : Any> putObject(key: String, value: T) {
+        val serializer = serializerOrThrow<T>(key)
+        val element = Json.encodeToJsonElement(serializer, value)
+        val objectValue = element as? JsonObject
+            ?: throw IllegalArgumentException(
+                "Expected object-like JSON for key '$key' and type '${typeOf<T>()}'.",
+            )
+        putResolved(key, objectValue)
+    }
+
     @OptIn(ExperimentalSerializationApi::class)
     inline fun <reified T : Any> put(key: String, value: T) {
-        serializerOrNull(typeOf<T>()) ?: throw IllegalArgumentException("No serializer found for key '$key' and type '${typeOf<T>()}'.",)
-        putResolved(key, value)
+        putSerializable(key, value)
     }
 
     fun footnote(message: String) {
@@ -46,8 +80,24 @@ class Scroll(
     }
 
     @PublishedApi
-    internal fun putResolved(key: String, value: Any) {
+    internal fun putResolved(key: String, value: JsonElement) {
         if (sealed) return
         data[key] = value
+    }
+
+    private fun ensureFinite(key: String, value: Number) {
+        when (value) {
+            is Double -> require(value.isFinite()) { "Non-finite numbers are not supported for key '$key'." }
+            is Float -> require(value.isFinite()) { "Non-finite numbers are not supported for key '$key'." }
+        }
+    }
+
+    @PublishedApi
+    @OptIn(ExperimentalSerializationApi::class)
+    internal inline fun <reified T : Any> serializerOrThrow(key: String): KSerializer<T> {
+        val serializer = serializerOrNull(typeOf<T>())
+            ?: throw IllegalArgumentException("No serializer found for key '$key' and type '${typeOf<T>()}'.")
+        @Suppress("UNCHECKED_CAST")
+        return serializer as KSerializer<T>
     }
 }
