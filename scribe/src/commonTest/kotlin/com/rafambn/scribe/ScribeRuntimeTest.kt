@@ -17,7 +17,7 @@ class ScribeRuntimeTest {
     fun startScroll_creates_scroll_for_the_given_shelf() {
         val shelf = RecordingShelf()
         val scribe = Scribe(shelf)
-        val scroll = scribe.startScroll("payment")
+        val scroll = scribe.startScroll()
 
         assertSame(scribe, scroll.context)
         assertEquals(1, scribe.scrolls.size)
@@ -31,7 +31,7 @@ class ScribeRuntimeTest {
 
         assertEquals(1, shelf.events.size)
         val event = shelf.events.single()
-        assertEquals("payment", event.name)
+        assertEquals(scroll.id, event.scrollId)
         assertEquals("card", event.data["method"])
         assertEquals(listOf("processing payment"), event.footnotes)
         assertTrue(event.success)
@@ -41,7 +41,7 @@ class ScribeRuntimeTest {
     fun seal_is_idempotent_and_writes_once() {
         val shelf = RecordingShelf()
         val scribe = Scribe(shelf)
-        val scroll = scribe.startScroll("checkout")
+        val scroll = scribe.startScroll()
 
         scroll.put("gateway", "stripe")
         scroll.footnote("charging card")
@@ -56,7 +56,7 @@ class ScribeRuntimeTest {
         assertEquals(1, shelf.events.size)
 
         val event = shelf.events.single()
-        assertEquals("checkout", event.name)
+        assertEquals(scroll.id, event.scrollId)
         assertEquals(false, event.success)
         assertEquals("fail", event.errorMessage)
         assertEquals("stripe", event.data["gateway"])
@@ -69,8 +69,8 @@ class ScribeRuntimeTest {
         val scribe = Scribe(shelf)
         val paymentService = PaymentService()
 
-        val scroll1 = scribe.startScroll("scroll1")
-        val scroll2 = scribe.startScroll("scroll2")
+        val scroll1 = scribe.startScroll()
+        val scroll2 = scribe.startScroll()
 
         runSuspend {
             paymentService.pay("order1", scroll1)
@@ -85,8 +85,8 @@ class ScribeRuntimeTest {
 
         assertEquals(2, shelf.events.size)
 
-        val successEvent = shelf.events.firstOrNull { it.name == "scroll1" }
-        val failureEvent = shelf.events.firstOrNull { it.name == "scroll2" }
+        val successEvent = shelf.events.firstOrNull { it.scrollId == scroll1.id }
+        val failureEvent = shelf.events.firstOrNull { it.scrollId == scroll2.id }
 
         assertNotNull(successEvent)
         assertNotNull(failureEvent)
@@ -94,12 +94,12 @@ class ScribeRuntimeTest {
 
         assertTrue(successEvent.success)
         assertEquals(null, successEvent.errorMessage)
-        assertEquals("scroll1", successEvent.data["scrollName"])
+        assertEquals(scroll1.id, successEvent.data["scrollId"])
         assertEquals("stripe", successEvent.data["gateway"])
         assertEquals(listOf("charging card"), successEvent.footnotes)
 
         assertFalse(failureEvent.success)
-        assertEquals("scroll2", failureEvent.data["scrollName"])
+        assertEquals(scroll2.id, failureEvent.data["scrollId"])
         assertEquals("gateway_call", failureEvent.data["error_stage"])
         assertEquals("order2 failed", failureEvent.errorMessage)
         assertEquals(listOf("charging card"), failureEvent.footnotes)
@@ -109,10 +109,10 @@ class ScribeRuntimeTest {
     fun putSerializable_stores_serializable_object_value() {
         val shelf = RecordingShelf()
         val scribe = Scribe(shelf)
-        val scroll = scribe.startScroll("with-object")
+        val scroll = scribe.startScroll()
 
         runSuspend {
-            scroll.putSerializable("meta", GatewayMeta(retries = 2), GatewayMeta.serializer())
+            scroll.put("meta", GatewayMeta(retries = 2))
             scroll.seal()
         }
 
@@ -124,7 +124,7 @@ class ScribeRuntimeTest {
     fun put_throws_for_custom_object_without_serializer() {
         val shelf = RecordingShelf()
         val scribe = Scribe(shelf)
-        val scroll = scribe.startScroll("fail-without-serializer")
+        val scroll = scribe.startScroll()
 
         assertFailsWith<IllegalArgumentException> {
             scroll.put("meta", NonSerializableMeta(retries = 2))
@@ -135,7 +135,7 @@ class ScribeRuntimeTest {
     fun generated_scroll_ids_are_unique_ints() {
         val shelf = RecordingShelf()
         val scribe = Scribe(shelf)
-        val ids = (1..500).map { scribe.startScroll("scroll-$it").id }
+        val ids = (1..500).map { scribe.startScroll().id }
 
         assertEquals(ids.size, ids.toSet().size)
         assertTrue(ids.all { it > 0 })
@@ -144,7 +144,7 @@ class ScribeRuntimeTest {
     private class PaymentService {
         suspend fun pay(orderId: String, scroll: Scroll) {
             try {
-                scroll.put("scrollName", scroll.name)
+                scroll.put("scrollId", scroll.id)
                 scroll.footnote("charging card")
                 if (orderId == "order2") {
                     throw IllegalStateException("order2 failed")

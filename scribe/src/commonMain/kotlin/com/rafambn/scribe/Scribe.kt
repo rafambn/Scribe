@@ -11,7 +11,7 @@ class Scribe(
     val scrolls: List<Scroll>
         get() = scrollsById.values.toList()
 
-    fun startScroll(name: String): Scroll {
+    fun startScroll(): Scroll {
         var id = newScrollId()
         while (scrollsById.containsKey(id)) {
             id = newScrollId()
