@@ -2,9 +2,11 @@ package com.rafambn.scribe
 
 import com.rafambn.scribe.internal.newScrollId
 import com.rafambn.scribe.internal.nowEpochMs
+import kotlinx.serialization.json.JsonElement
 
 class Scribe(
     private val shelf: Shelf,
+    val contextData: MutableMap<String, JsonElement> = mutableMapOf()
 ) {
     private val scrollsById = mutableMapOf<String, Scroll>()
 
@@ -29,6 +31,7 @@ class Scribe(
         val scroll = Scroll(
             id = resolvedId,
             context = this,
+            initialData = contextData.toMap(),
             startedAtEpochMs = nowEpochMs(),
         )
         scrollsById[resolvedId] = scroll

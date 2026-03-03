@@ -13,9 +13,10 @@ import kotlin.reflect.typeOf
 class Scroll(
     val id: String,
     val context: Scribe,
+    initialData: Map<String, JsonElement> = emptyMap(),
     private val startedAtEpochMs: Long,
 ) {
-    private val data = mutableMapOf<String, JsonElement>()
+    private val data = initialData.toMutableMap()
     private val notes = mutableListOf<String>()
     private var sealed: Boolean = false
 

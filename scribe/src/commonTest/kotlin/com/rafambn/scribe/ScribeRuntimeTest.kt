@@ -218,6 +218,64 @@ class ScribeRuntimeTest {
     }
 
     @Test
+    fun startScroll_includes_context_data_in_event() {
+        val shelf = RecordingShelf()
+        val scribe = Scribe(shelf)
+        scribe.contextData["service"] = JsonPrimitive("mobile-app")
+        scribe.contextData["environment"] = JsonPrimitive("production")
+
+        val scroll = scribe.startScroll()
+
+        runSuspend {
+            scroll.seal()
+        }
+
+        val event = shelf.events.single()
+        assertEquals(JsonPrimitive("mobile-app"), event.data["service"])
+        assertEquals(JsonPrimitive("production"), event.data["environment"])
+    }
+
+    @Test
+    fun startScroll_uses_context_snapshot_at_creation_time() {
+        val shelf = RecordingShelf()
+        val scribe = Scribe(shelf)
+        scribe.contextData["region"] = JsonPrimitive("us-east")
+
+        val firstScroll = scribe.startScroll(id = "first")
+        scribe.contextData["region"] = JsonPrimitive("eu-west")
+        val secondScroll = scribe.startScroll(id = "second")
+
+        runSuspend {
+            firstScroll.seal()
+            secondScroll.seal()
+        }
+
+        val firstEvent = shelf.events.firstOrNull { it.scrollId == "first" }
+        val secondEvent = shelf.events.firstOrNull { it.scrollId == "second" }
+
+        assertNotNull(firstEvent)
+        assertNotNull(secondEvent)
+        assertEquals(JsonPrimitive("us-east"), firstEvent.data["region"])
+        assertEquals(JsonPrimitive("eu-west"), secondEvent.data["region"])
+    }
+
+    @Test
+    fun scroll_put_overrides_context_data_for_the_current_scroll() {
+        val shelf = RecordingShelf()
+        val scribe = Scribe(shelf)
+        scribe.contextData["region"] = JsonPrimitive("us-east")
+        val scroll = scribe.startScroll()
+
+        runSuspend {
+            scroll.putString("region", "ap-south")
+            scroll.seal()
+        }
+
+        val event = shelf.events.single()
+        assertEquals(JsonPrimitive("ap-south"), event.data["region"])
+    }
+
+    @Test
     fun captureScroll_seals_successfully_and_returns_result() {
         val shelf = RecordingShelf()
         val scribe = Scribe(shelf)
