@@ -1,7 +1,5 @@
 package com.rafambn.scribe
 
-import com.rafambn.scribe.internal.newScrollId
-import com.rafambn.scribe.internal.nowEpochMs
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -16,7 +14,7 @@ class Scribe(
     val shelf: List<Saver<*>>,
     val contextData: MutableMap<String, JsonElement> = mutableMapOf(),
     val processConfig: ScribeProcessConfig = ScribeProcessConfig(),
-    val margins: List<Margin> = emptyList(),
+    val margins: Margin? = null,
 ) {
     private val scrollsById = mutableMapOf<String, Scroll>()
     private val queue = Channel<Record>(
@@ -74,7 +72,7 @@ class Scribe(
             context = this,
             initialData = contextData.toMap(),
         )
-        margins.forEach { it.header(scroll) }
+        margins?.header(scroll)
         scrollsById[resolvedId] = scroll
         return scroll
     }

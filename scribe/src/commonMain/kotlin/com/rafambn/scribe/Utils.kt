@@ -1,4 +1,4 @@
-package com.rafambn.scribe.internal
+package com.rafambn.scribe
 
 import kotlin.time.Clock
 import kotlin.time.ExperimentalTime

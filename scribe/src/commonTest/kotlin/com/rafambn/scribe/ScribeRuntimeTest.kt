@@ -436,7 +436,7 @@ class ScribeRuntimeTest {
                 scroll.putNumber("sealedAtEpochMs", 2000L)
             }
         }
-        val scribe = scribeWithScrollShelves(shelf, margins = listOf(timestampMargin))
+        val scribe = scribeWithScrollShelves(shelf, margins = timestampMargin)
         val scroll = scribe.startScroll()
 
         runSuspend {
@@ -450,9 +450,9 @@ class ScribeRuntimeTest {
     }
 
     @Test
-    fun empty_margins_means_no_timestamps() {
+    fun no_margin_means_no_timestamps() {
         val shelf = RecordingShelf()
-        val scribe = scribeWithScrollShelves(shelf, margins = emptyList())
+        val scribe = scribeWithScrollShelves(shelf, margins = null)
         val scroll = scribe.startScroll()
 
         runSuspend {
@@ -480,7 +480,7 @@ class ScribeRuntimeTest {
                 }
             }
         }
-        val scribe = scribeWithScrollShelves(shelf, margins = listOf(elapsedMargin))
+        val scribe = scribeWithScrollShelves(shelf, margins = elapsedMargin)
         val scroll = scribe.startScroll()
 
         runSuspend {
@@ -494,18 +494,14 @@ class ScribeRuntimeTest {
     }
 
     @Test
-    fun margins_run_in_order() {
+    fun margin_header_runs_before_footer() {
         val shelf = RecordingShelf()
         val calls = mutableListOf<String>()
-        val margin1 = object : Margin {
-            override fun header(scroll: Scroll) { calls.add("header1") }
-            override fun footer(scroll: Scroll) { calls.add("footer1") }
+        val margin = object : Margin {
+            override fun header(scroll: Scroll) { calls.add("header") }
+            override fun footer(scroll: Scroll) { calls.add("footer") }
         }
-        val margin2 = object : Margin {
-            override fun header(scroll: Scroll) { calls.add("header2") }
-            override fun footer(scroll: Scroll) { calls.add("footer2") }
-        }
-        val scribe = scribeWithScrollShelves(shelf, margins = listOf(margin1, margin2))
+        val scribe = scribeWithScrollShelves(shelf, margins = margin)
         val scroll = scribe.startScroll()
 
         runSuspend {
@@ -513,7 +509,7 @@ class ScribeRuntimeTest {
             scribe.close()
         }
 
-        assertEquals(listOf("header1", "header2", "footer1", "footer2"), calls)
+        assertEquals(listOf("header", "footer"), calls)
     }
 
     @Test
@@ -612,7 +608,7 @@ private val UUID_REGEX =
 private fun scribeWithScrollShelves(
     vararg shelves: ScrollSaver,
     processConfig: ScribeProcessConfig = ScribeProcessConfig(),
-    margins: List<Margin> = emptyList(),
+    margins: Margin? = null,
 ): Scribe = Scribe(
     shelf = shelves.toList(),
     processConfig = processConfig,

@@ -1,6 +1,5 @@
 package com.rafambn.scribe
 
-import com.rafambn.scribe.internal.nowEpochMs
 import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.KSerializer
 import kotlinx.serialization.json.Json
@@ -80,7 +79,7 @@ class Scroll(
 
     suspend fun seal(success: Boolean = true, error: Throwable? = null) {
         if (sealed) return
-        context.margins.forEach { it.footer(this) }
+        context.margins?.footer(this)
         sealed = true
 
         context.write(
