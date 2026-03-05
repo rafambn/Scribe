@@ -22,12 +22,12 @@ jobs:
     strategy:
       matrix:
         include:
-          - target: iosSimulatorArm64Test
-            os: macos-latest
           - target: jvmTest
             os: ubuntu-latest
-          - target: linuxX64Test
-            os: ubuntu-latest
+          - target: iosSimulatorArm64Test
+            os: macos-latest
+          - target: iosArm64Test
+            os: macos-latest
           - target: testAndroidHostTest
             os: ubuntu-latest
     runs-on: ${{ matrix.os }}

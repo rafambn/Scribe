@@ -15,6 +15,7 @@ class Scribe(
     val contextData: MutableMap<String, JsonElement> = mutableMapOf(),
     val processConfig: ScribeProcessConfig = ScribeProcessConfig(),
     val margins: Margin? = null,
+    val onUncaughtException: ((Throwable) -> Unit)? = null,
 ) {
     private val scrollsById = mutableMapOf<String, Scroll>()
     internal val queue = Channel<Record>(
@@ -48,6 +49,9 @@ class Scribe(
     init {
         require(processConfig.bufferSize >= -2) { "BufferSize must be >= -2. Check Channel documentation" }
         require(shelf.isNotEmpty()) { "At least one shelf is required." }
+        if (onUncaughtException != null) {
+            installUncaughtExceptionHandler(onUncaughtException)
+        }
     }
 
     fun startScroll(id: String? = null): Scroll {
