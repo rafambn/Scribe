@@ -26,7 +26,7 @@ jobs:
             os: ubuntu-latest
           - target: iosSimulatorArm64Test
             os: macos-latest
-          - target: iosArm64Test
+          - target: iosX64Test
             os: macos-latest
           - target: testAndroidHostTest
             os: ubuntu-latest
