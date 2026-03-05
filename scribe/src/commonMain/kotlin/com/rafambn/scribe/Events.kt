@@ -10,8 +10,6 @@ data class SealedScroll(
     val success: Boolean,
     val errorMessage: String?,
     val data: Map<String, JsonElement>,
-    val startedAtEpochMs: Long,
-    val sealedAtEpochMs: Long,
 ): Record
 
 data class Note(

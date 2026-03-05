@@ -14,7 +14,6 @@ class Scroll(
     val id: String,
     val context: Scribe,
     initialData: Map<String, JsonElement> = emptyMap(),
-    private val startedAtEpochMs: Long,
 ) {
     private val data = initialData.toMutableMap()
     private var sealed: Boolean = false
@@ -72,8 +71,16 @@ class Scroll(
         }
     }
 
+    fun get(key: String): JsonElement? = data[key]
+
+    fun remove(key: String): JsonElement? {
+        if (sealed) return null
+        return data.remove(key)
+    }
+
     suspend fun seal(success: Boolean = true, error: Throwable? = null) {
         if (sealed) return
+        context.enrichers.forEach { it.onSeal(this) }
         sealed = true
 
         context.write(
@@ -82,8 +89,6 @@ class Scroll(
                 success = success,
                 errorMessage = error?.message,
                 data = data.toMap(),
-                startedAtEpochMs = startedAtEpochMs,
-                sealedAtEpochMs = nowEpochMs(),
             ),
         )
     }

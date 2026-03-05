@@ -11,6 +11,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertFailsWith
 import kotlin.test.assertNotNull
+import kotlin.test.assertNull
 import kotlin.test.assertSame
 import kotlin.test.assertTrue
 
@@ -424,6 +425,122 @@ class ScribeRuntimeTest {
         assertFalse(shelf.events.any { it.scrollId == "three" })
     }
 
+    @Test
+    fun timestamp_enricher_adds_timestamps_to_data() {
+        val shelf = RecordingShelf()
+        val scribe = scribeWithScrollShelves(shelf)
+        val scroll = scribe.startScroll()
+
+        runSuspend {
+            scroll.seal()
+            scribe.close()
+        }
+
+        val event = shelf.events.single()
+        assertNotNull(event.data["startedAtEpochMs"])
+        assertNotNull(event.data["sealedAtEpochMs"])
+    }
+
+    @Test
+    fun empty_enrichers_means_no_timestamps() {
+        val shelf = RecordingShelf()
+        val scribe = scribeWithScrollShelves(shelf, enrichers = emptyList())
+        val scroll = scribe.startScroll()
+
+        runSuspend {
+            scroll.seal()
+            scribe.close()
+        }
+
+        val event = shelf.events.single()
+        assertFalse(event.data.containsKey("startedAtEpochMs"))
+        assertFalse(event.data.containsKey("sealedAtEpochMs"))
+    }
+
+    @Test
+    fun custom_enricher_can_add_elapsed_time() {
+        val shelf = RecordingShelf()
+        val elapsedEnricher = object : ScrollEnricher {
+            override fun onStart(scroll: Scroll) {
+                scroll.putNumber("_startTime", 1000L)
+            }
+            override fun onSeal(scroll: Scroll) {
+                val startExists = scroll.get("_startTime") != null
+                if (startExists) {
+                    scroll.remove("_startTime")
+                    scroll.putNumber("elapsedMs", 500L)
+                }
+            }
+        }
+        val scribe = scribeWithScrollShelves(shelf, enrichers = listOf(elapsedEnricher))
+        val scroll = scribe.startScroll()
+
+        runSuspend {
+            scroll.seal()
+            scribe.close()
+        }
+
+        val event = shelf.events.single()
+        assertEquals(JsonPrimitive(500L), event.data["elapsedMs"])
+        assertFalse(event.data.containsKey("_startTime"))
+    }
+
+    @Test
+    fun enrichers_run_in_order() {
+        val shelf = RecordingShelf()
+        val calls = mutableListOf<String>()
+        val enricher1 = object : ScrollEnricher {
+            override fun onStart(scroll: Scroll) { calls.add("start1") }
+            override fun onSeal(scroll: Scroll) { calls.add("seal1") }
+        }
+        val enricher2 = object : ScrollEnricher {
+            override fun onStart(scroll: Scroll) { calls.add("start2") }
+            override fun onSeal(scroll: Scroll) { calls.add("seal2") }
+        }
+        val scribe = scribeWithScrollShelves(shelf, enrichers = listOf(enricher1, enricher2))
+        val scroll = scribe.startScroll()
+
+        runSuspend {
+            scroll.seal()
+            scribe.close()
+        }
+
+        assertEquals(listOf("start1", "start2", "seal1", "seal2"), calls)
+    }
+
+    @Test
+    fun scroll_get_and_remove_work() {
+        val shelf = RecordingShelf()
+        val scribe = scribeWithScrollShelves(shelf)
+        val scroll = scribe.startScroll()
+
+        runSuspend {
+            scroll.putString("key", "value")
+            assertEquals(JsonPrimitive("value"), scroll.get("key"))
+            val removed = scroll.remove("key")
+            assertEquals(JsonPrimitive("value"), removed)
+            assertNull(scroll.get("key"))
+            scribe.close()
+        }
+    }
+
+    @Test
+    fun get_and_remove_on_sealed_scroll_return_null() {
+        val shelf = RecordingShelf()
+        val scribe = scribeWithScrollShelves(shelf)
+        val scroll = scribe.startScroll()
+
+        runSuspend {
+            scroll.putString("key", "value")
+            scroll.seal()
+            assertNull(scroll.remove("key"))
+            scribe.close()
+        }
+
+        val event = shelf.events.single()
+        assertEquals(JsonPrimitive("value"), event.data["key"])
+    }
+
     private class PaymentService {
         suspend fun pay(orderId: String, scroll: Scroll) {
             try {
@@ -487,9 +604,11 @@ private val UUID_REGEX =
 private fun scribeWithScrollShelves(
     vararg shelves: ScrollSaver,
     processConfig: ScribeProcessConfig = ScribeProcessConfig(),
+    enrichers: List<ScrollEnricher> = listOf(TimestampEnricher()),
 ): Scribe = Scribe(
     shelf = shelves.toList(),
     processConfig = processConfig,
+    enrichers = enrichers,
 )
 
 private fun <T> runSuspend(block: suspend () -> T): T = runBlocking { block() }

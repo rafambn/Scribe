@@ -16,6 +16,7 @@ class Scribe(
     val shelf: List<Saver<*>>,
     val contextData: MutableMap<String, JsonElement> = mutableMapOf(),
     val processConfig: ScribeProcessConfig = ScribeProcessConfig(),
+    val enrichers: List<ScrollEnricher> = listOf(TimestampEnricher()),
 ) {
     private val scrollsById = mutableMapOf<String, Scroll>()
     private val queue = Channel<Record>(
@@ -72,8 +73,8 @@ class Scribe(
             id = resolvedId,
             context = this,
             initialData = contextData.toMap(),
-            startedAtEpochMs = nowEpochMs(),
         )
+        enrichers.forEach { it.onStart(scroll) }
         scrollsById[resolvedId] = scroll
         return scroll
     }
