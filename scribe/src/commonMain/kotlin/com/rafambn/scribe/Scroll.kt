@@ -83,7 +83,31 @@ class Scroll(
             context = _contextData,
             data = _data.toMap(),
         )
-        context.write(result)
+        context.queue.send(result)
+        return result
+    }
+
+    fun sealBlocking(success: Boolean = true, error: Throwable? = null): SealedScroll {
+        if (sealed) {
+            return SealedScroll(
+                scrollId = id,
+                success = success,
+                errorMessage = error?.message,
+                context = _contextData,
+                data = _data.toMap(),
+            )
+        }
+        context.margins?.footer(this)
+        sealed = true
+
+        val result = SealedScroll(
+            scrollId = id,
+            success = success,
+            errorMessage = error?.message,
+            context = _contextData,
+            data = _data.toMap(),
+        )
+        context.queue.trySend(result)
         return result
     }
 

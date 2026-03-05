@@ -17,7 +17,7 @@ class Scribe(
     val margins: Margin? = null,
 ) {
     private val scrollsById = mutableMapOf<String, Scroll>()
-    private val queue = Channel<Record>(
+    internal val queue = Channel<Record>(
         capacity = processConfig.bufferSize,
         onBufferOverflow = processConfig.overflowStrategy,
     )
@@ -93,13 +93,29 @@ class Scribe(
         return sealed
     }
 
+    fun captureScrollBlocking(
+        id: String? = null,
+        block: Scroll.() -> Unit = {},
+    ): SealedScroll {
+        val scroll = startScroll(id = id)
+        val throwable = try {
+            scroll.block()
+            null
+        } catch (t: Throwable) {
+            t
+        }
+        val sealed = scroll.sealBlocking(success = throwable == null, error = throwable)
+        if (throwable != null) throw throwable
+        return sealed
+    }
+
     suspend fun note(
         tag: String,
         message: String,
         level: LogLevel = LogLevel.INFO,
         timestamp: Long = nowEpochMs(),
     ) {
-        write(
+        queue.send(
             Note(
                 tag = tag,
                 message = message,
@@ -115,7 +131,19 @@ class Scribe(
         processScope.cancel()
     }
 
-    internal suspend fun write(record: Record) {
-        queue.send(record)
+    fun noteBlocking(
+        tag: String,
+        message: String,
+        level: LogLevel = LogLevel.INFO,
+        timestamp: Long = nowEpochMs(),
+    ) {
+        queue.trySend(
+            Note(
+                tag = tag,
+                message = message,
+                level = level,
+                timestamp = timestamp,
+            ),
+        )
     }
 }
