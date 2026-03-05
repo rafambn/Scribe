@@ -33,8 +33,8 @@ class Scribe(
                                 is ScrollSaver if record is SealedScroll -> saver.write(record)
                                 is NoteSaver if record is Note -> saver.write(record)
                             }
-                        } catch (_: Throwable) {
-                            // Keep processing even if one sink fails.
+                        } catch (e: Throwable) {
+                            processConfig.onSinkError(saver, record, e)
                         }
                     }
                 }
