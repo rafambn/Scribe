@@ -426,9 +426,17 @@ class ScribeRuntimeTest {
     }
 
     @Test
-    fun timestamp_enricher_adds_timestamps_to_data() {
+    fun custom_margin_can_add_timestamps() {
         val shelf = RecordingShelf()
-        val scribe = scribeWithScrollShelves(shelf)
+        val timestampMargin = object : Margin {
+            override fun header(scroll: Scroll) {
+                scroll.putNumber("startedAtEpochMs", 1000L)
+            }
+            override fun footer(scroll: Scroll) {
+                scroll.putNumber("sealedAtEpochMs", 2000L)
+            }
+        }
+        val scribe = scribeWithScrollShelves(shelf, margins = listOf(timestampMargin))
         val scroll = scribe.startScroll()
 
         runSuspend {
@@ -437,14 +445,14 @@ class ScribeRuntimeTest {
         }
 
         val event = shelf.events.single()
-        assertNotNull(event.data["startedAtEpochMs"])
-        assertNotNull(event.data["sealedAtEpochMs"])
+        assertEquals(JsonPrimitive(1000L), event.data["startedAtEpochMs"])
+        assertEquals(JsonPrimitive(2000L), event.data["sealedAtEpochMs"])
     }
 
     @Test
-    fun empty_enrichers_means_no_timestamps() {
+    fun empty_margins_means_no_timestamps() {
         val shelf = RecordingShelf()
-        val scribe = scribeWithScrollShelves(shelf, enrichers = emptyList())
+        val scribe = scribeWithScrollShelves(shelf, margins = emptyList())
         val scroll = scribe.startScroll()
 
         runSuspend {
@@ -458,13 +466,13 @@ class ScribeRuntimeTest {
     }
 
     @Test
-    fun custom_enricher_can_add_elapsed_time() {
+    fun custom_margin_can_add_elapsed_time() {
         val shelf = RecordingShelf()
-        val elapsedEnricher = object : ScrollEnricher {
-            override fun onStart(scroll: Scroll) {
+        val elapsedMargin = object : Margin {
+            override fun header(scroll: Scroll) {
                 scroll.putNumber("_startTime", 1000L)
             }
-            override fun onSeal(scroll: Scroll) {
+            override fun footer(scroll: Scroll) {
                 val startExists = scroll.get("_startTime") != null
                 if (startExists) {
                     scroll.remove("_startTime")
@@ -472,7 +480,7 @@ class ScribeRuntimeTest {
                 }
             }
         }
-        val scribe = scribeWithScrollShelves(shelf, enrichers = listOf(elapsedEnricher))
+        val scribe = scribeWithScrollShelves(shelf, margins = listOf(elapsedMargin))
         val scroll = scribe.startScroll()
 
         runSuspend {
@@ -486,18 +494,18 @@ class ScribeRuntimeTest {
     }
 
     @Test
-    fun enrichers_run_in_order() {
+    fun margins_run_in_order() {
         val shelf = RecordingShelf()
         val calls = mutableListOf<String>()
-        val enricher1 = object : ScrollEnricher {
-            override fun onStart(scroll: Scroll) { calls.add("start1") }
-            override fun onSeal(scroll: Scroll) { calls.add("seal1") }
+        val margin1 = object : Margin {
+            override fun header(scroll: Scroll) { calls.add("header1") }
+            override fun footer(scroll: Scroll) { calls.add("footer1") }
         }
-        val enricher2 = object : ScrollEnricher {
-            override fun onStart(scroll: Scroll) { calls.add("start2") }
-            override fun onSeal(scroll: Scroll) { calls.add("seal2") }
+        val margin2 = object : Margin {
+            override fun header(scroll: Scroll) { calls.add("header2") }
+            override fun footer(scroll: Scroll) { calls.add("footer2") }
         }
-        val scribe = scribeWithScrollShelves(shelf, enrichers = listOf(enricher1, enricher2))
+        val scribe = scribeWithScrollShelves(shelf, margins = listOf(margin1, margin2))
         val scroll = scribe.startScroll()
 
         runSuspend {
@@ -505,7 +513,7 @@ class ScribeRuntimeTest {
             scribe.close()
         }
 
-        assertEquals(listOf("start1", "start2", "seal1", "seal2"), calls)
+        assertEquals(listOf("header1", "header2", "footer1", "footer2"), calls)
     }
 
     @Test
@@ -604,11 +612,11 @@ private val UUID_REGEX =
 private fun scribeWithScrollShelves(
     vararg shelves: ScrollSaver,
     processConfig: ScribeProcessConfig = ScribeProcessConfig(),
-    enrichers: List<ScrollEnricher> = listOf(TimestampEnricher()),
+    margins: List<Margin> = emptyList(),
 ): Scribe = Scribe(
     shelf = shelves.toList(),
     processConfig = processConfig,
-    enrichers = enrichers,
+    margins = margins,
 )
 
 private fun <T> runSuspend(block: suspend () -> T): T = runBlocking { block() }

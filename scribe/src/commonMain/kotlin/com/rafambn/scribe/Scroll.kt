@@ -80,7 +80,7 @@ class Scroll(
 
     suspend fun seal(success: Boolean = true, error: Throwable? = null) {
         if (sealed) return
-        context.enrichers.forEach { it.onSeal(this) }
+        context.margins.forEach { it.footer(this) }
         sealed = true
 
         context.write(
