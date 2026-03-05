@@ -230,8 +230,8 @@ class ScribeRuntimeTest {
         }
 
         val event = shelf.events.single()
-        assertEquals(JsonPrimitive("mobile-app"), event.data["service"])
-        assertEquals(JsonPrimitive("production"), event.data["environment"])
+        assertEquals(JsonPrimitive("mobile-app"), event.context["service"])
+        assertEquals(JsonPrimitive("production"), event.context["environment"])
     }
 
     @Test
@@ -255,12 +255,12 @@ class ScribeRuntimeTest {
 
         assertNotNull(firstEvent)
         assertNotNull(secondEvent)
-        assertEquals(JsonPrimitive("us-east"), firstEvent.data["region"])
-        assertEquals(JsonPrimitive("eu-west"), secondEvent.data["region"])
+        assertEquals(JsonPrimitive("us-east"), firstEvent.context["region"])
+        assertEquals(JsonPrimitive("eu-west"), secondEvent.context["region"])
     }
 
     @Test
-    fun scroll_put_overrides_context_data_for_the_current_scroll() {
+    fun scroll_put_goes_to_data_field_separate_from_context() {
         val shelf = RecordingShelf()
         val scribe = scribeWithScrollShelves(shelf)
         scribe.contextData["region"] = JsonPrimitive("us-east")
@@ -273,32 +273,29 @@ class ScribeRuntimeTest {
         }
 
         val event = shelf.events.single()
+        assertEquals(JsonPrimitive("us-east"), event.context["region"])
         assertEquals(JsonPrimitive("ap-south"), event.data["region"])
     }
 
     @Test
-    fun captureScroll_seals_successfully_and_returns_result() {
+    fun captureScroll_seals_successfully_and_returns_sealed_scroll() {
         val shelf = RecordingShelf()
         val scribe = scribeWithScrollShelves(shelf)
 
-        val result = runSuspend {
-            val value = scribe.captureScroll {
+        val sealed = runSuspend {
+            scribe.captureScroll {
                 putString("operation", "checkout")
-                "ok"
             }
-            scribe.close()
-            value
         }
 
-        assertEquals("ok", result)
+        runSuspend { scribe.close() }
+
+        assertTrue(sealed.success)
+        assertEquals(null, sealed.errorMessage)
+        assertEquals(JsonPrimitive("checkout"), sealed.data["operation"])
         assertEquals(1, shelf.events.size)
         assertEquals(1, scribe.scrolls.size)
         assertTrue(scribe.scrolls.single().isSealed)
-
-        val event = shelf.events.single()
-        assertTrue(event.success)
-        assertEquals(null, event.errorMessage)
-        assertEquals(JsonPrimitive("checkout"), event.data["operation"])
     }
 
     @Test

@@ -70,19 +70,27 @@ class Scribe(
         val scroll = Scroll(
             id = resolvedId,
             context = this,
-            initialData = contextData.toMap(),
+            contextData = contextData.toMap(),
         )
         margins?.header(scroll)
         scrollsById[resolvedId] = scroll
         return scroll
     }
 
-    suspend inline fun <T> captureScroll(
+    suspend fun captureScroll(
         id: String? = null,
-        block: suspend Scroll.() -> T,
-    ): T {
+        block: suspend Scroll.() -> Unit = {},
+    ): SealedScroll {
         val scroll = startScroll(id = id)
-        return scroll.use(block)
+        val throwable = try {
+            scroll.block()
+            null
+        } catch (t: Throwable) {
+            t
+        }
+        val sealed = scroll.seal(success = throwable == null, error = throwable)
+        if (throwable != null) throw throwable
+        return sealed
     }
 
     suspend fun note(

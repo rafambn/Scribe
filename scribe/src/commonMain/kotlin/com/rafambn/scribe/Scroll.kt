@@ -12,9 +12,10 @@ import kotlin.reflect.typeOf
 class Scroll(
     val id: String,
     val context: Scribe,
-    initialData: Map<String, JsonElement> = emptyMap(),
+    contextData: Map<String, JsonElement> = emptyMap(),
 ) {
-    private val data = initialData.toMutableMap()
+    private val _contextData = contextData.toMap()
+    private val _data = mutableMapOf<String, JsonElement>()
     private var sealed: Boolean = false
 
     val isSealed: Boolean
@@ -55,47 +56,41 @@ class Scroll(
         putSerializable(key, value)
     }
 
-    suspend inline fun <T> use(block: suspend Scroll.() -> T): T {
-        return try {
-            val result = block()
-            seal(success = true)
-            result
-        } catch (t: Throwable) {
-            try {
-                seal(success = false, error = t)
-            } catch (sealError: Throwable) {
-                t.addSuppressed(sealError)
-            }
-            throw t
-        }
-    }
-
-    fun get(key: String): JsonElement? = data[key]
+    fun get(key: String): JsonElement? = _data[key] ?: _contextData[key]
 
     fun remove(key: String): JsonElement? {
         if (sealed) return null
-        return data.remove(key)
+        return _data.remove(key)
     }
 
-    suspend fun seal(success: Boolean = true, error: Throwable? = null) {
-        if (sealed) return
-        context.margins?.footer(this)
-        sealed = true
-
-        context.write(
-            SealedScroll(
+    suspend fun seal(success: Boolean = true, error: Throwable? = null): SealedScroll {
+        if (sealed) {
+            return SealedScroll(
                 scrollId = id,
                 success = success,
                 errorMessage = error?.message,
-                data = data.toMap(),
-            ),
+                context = _contextData,
+                data = _data.toMap(),
+            )
+        }
+        context.margins?.footer(this)
+        sealed = true
+
+        val result = SealedScroll(
+            scrollId = id,
+            success = success,
+            errorMessage = error?.message,
+            context = _contextData,
+            data = _data.toMap(),
         )
+        context.write(result)
+        return result
     }
 
     @PublishedApi
     internal fun putResolved(key: String, value: JsonElement) {
         if (sealed) return
-        data[key] = value
+        _data[key] = value
     }
 
     private fun ensureFinite(key: String, value: Number) {

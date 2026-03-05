@@ -9,6 +9,7 @@ data class SealedScroll(
     val scrollId: String,
     val success: Boolean,
     val errorMessage: String?,
+    val context: Map<String, JsonElement>,
     val data: Map<String, JsonElement>,
 ): Record
 
