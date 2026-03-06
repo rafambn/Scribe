@@ -2,6 +2,7 @@ package com.rafambn.scribe
 
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.channels.BufferOverflow
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonObject
@@ -219,8 +220,8 @@ class ScribeRuntimeTest {
     fun startScroll_includes_context_data_in_event() {
         val shelf = RecordingShelf()
         val scribe = scribeWithScrollShelves(shelf)
-        scribe.contextData["service"] = JsonPrimitive("mobile-app")
-        scribe.contextData["environment"] = JsonPrimitive("production")
+        scribe.putContext("service", JsonPrimitive("mobile-app"))
+        scribe.putContext("environment", JsonPrimitive("production"))
 
         val scroll = scribe.startScroll()
 
@@ -238,10 +239,10 @@ class ScribeRuntimeTest {
     fun startScroll_uses_context_snapshot_at_creation_time() {
         val shelf = RecordingShelf()
         val scribe = scribeWithScrollShelves(shelf)
-        scribe.contextData["region"] = JsonPrimitive("us-east")
+        scribe.putContext("region", JsonPrimitive("us-east"))
 
         val firstScroll = scribe.startScroll(id = "first")
-        scribe.contextData["region"] = JsonPrimitive("eu-west")
+        scribe.putContext("region", JsonPrimitive("eu-west"))
         val secondScroll = scribe.startScroll(id = "second")
 
         runSuspend {
@@ -263,7 +264,7 @@ class ScribeRuntimeTest {
     fun scroll_put_goes_to_data_field_separate_from_context() {
         val shelf = RecordingShelf()
         val scribe = scribeWithScrollShelves(shelf)
-        scribe.contextData["region"] = JsonPrimitive("us-east")
+        scribe.putContext("region", JsonPrimitive("us-east"))
         val scroll = scribe.startScroll()
 
         runSuspend {
@@ -288,7 +289,7 @@ class ScribeRuntimeTest {
             }
         }
 
-        runSuspend { scribe.close() }
+        scribe.close()
 
         assertTrue(sealed.success)
         assertEquals(null, sealed.errorMessage)
@@ -311,7 +312,7 @@ class ScribeRuntimeTest {
                 }
             }
         }
-        runSuspend { scribe.close() }
+        scribe.close()
 
         assertEquals("gateway failed", thrown.message)
         assertEquals(1, shelf.events.size)
@@ -397,8 +398,25 @@ class ScribeRuntimeTest {
         assertEquals(0, shelf.events.size)
 
         gate.complete(Unit)
-        runSuspend { scribe.close() }
+        scribe.close()
         assertEquals(1, shelf.events.size)
+    }
+
+    @Test
+    fun processor_survives_idle_gap_between_sends() {
+        val shelf = RecordingShelf()
+        val scribe = scribeWithScrollShelves(shelf)
+
+        runSuspend {
+            scribe.startScroll(id = "first").seal()
+            delay(500)
+            scribe.startScroll(id = "second").seal()
+        }
+        scribe.close()
+
+        assertEquals(2, shelf.events.size)
+        assertTrue(shelf.events.any { it.scrollId == "first" })
+        assertTrue(shelf.events.any { it.scrollId == "second" })
     }
 
     @Test
@@ -417,7 +435,7 @@ class ScribeRuntimeTest {
         }
 
         gate.complete(Unit)
-        runSuspend { scribe.close() }
+        scribe.close()
 
         assertFalse(shelf.events.any { it.scrollId == "three" })
     }
