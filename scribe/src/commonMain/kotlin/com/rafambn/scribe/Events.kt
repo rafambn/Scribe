@@ -1,10 +1,13 @@
 package com.rafambn.scribe
 
 import kotlinx.coroutines.channels.BufferOverflow
+import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonElement
 
+@Serializable
 sealed interface Record
 
+@Serializable
 data class SealedScroll(
     val scrollId: String,
     val success: Boolean,
@@ -13,6 +16,7 @@ data class SealedScroll(
     val data: Map<String, JsonElement>,
 ): Record
 
+@Serializable
 data class Note(
     val tag: String,
     val message: String,
@@ -20,6 +24,7 @@ data class Note(
     val timestamp: Long,
 ): Record
 
+@Serializable
 enum class LogLevel {
     VERBOSE,
     DEBUG,
