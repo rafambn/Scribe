@@ -50,7 +50,7 @@ class Scribe(
         }
     }
 
-    fun getScrolls(): List<Scroll> = scrollsById.values.toList()
+    fun seekScrolls(): List<Scroll> = scrollsById.values.toList()
 
     fun unrollScroll(id: String? = null): Scroll {
         val resolvedId = when {

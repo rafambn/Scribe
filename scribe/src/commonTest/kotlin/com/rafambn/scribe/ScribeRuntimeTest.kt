@@ -26,10 +26,10 @@ class ScribeRuntimeTest {
             val scribe = scribeWithScrollShelves(shelf)
             val scroll = scribe.unrollScroll()
 
-            assertEquals(1, scribe.getScrolls().size)
-            assertSame(scroll, scribe.getScrolls().single())
+            assertEquals(1, scribe.seekScrolls().size)
+            assertSame(scroll, scribe.seekScrolls().single())
 
-            scroll.putSerializable("method", "card")
+            scroll.writeSerializable("method", "card")
             scroll.seal(success = true)
             shelf.awaitEvents(1)
             scribe.close()
@@ -49,7 +49,7 @@ class ScribeRuntimeTest {
             val scribe = scribeWithScrollShelves(shelf)
             val scroll = scribe.unrollScroll()
 
-            scroll.putSerializable("gateway", "stripe")
+            scroll.writeSerializable("gateway", "stripe")
             assertFalse(scroll.isSealed)
 
             scroll.seal(success = false, error = IllegalStateException("fail"))
@@ -114,7 +114,7 @@ class ScribeRuntimeTest {
             val scribe = scribeWithScrollShelves(shelf)
             val scroll = scribe.unrollScroll()
 
-            scroll.putSerializable("meta", GatewayMeta(retries = 2))
+            scroll.writeSerializable("meta", GatewayMeta(retries = 2))
             scroll.seal()
             shelf.awaitEvents(1)
             scribe.close()
@@ -125,16 +125,16 @@ class ScribeRuntimeTest {
     }
 
     @Test
-    fun put_helpers_store_json_safe_values() {
+    fun write_helpers_store_json_safe_values() {
         runSuspend {
             val shelf = RecordingShelf()
             val scribe = scribeWithScrollShelves(shelf)
             val scroll = scribe.unrollScroll()
 
-            scroll.putString("message", "accepted")
-            scroll.putNumber("attempt", 3)
-            scroll.putBoolean("retry", false)
-            scroll.putSerializable("meta", GatewayMeta(retries = 2))
+            scroll.writeString("message", "accepted")
+            scroll.writeNumber("attempt", 3)
+            scroll.writeBoolean("retry", false)
+            scroll.writeSerializable("meta", GatewayMeta(retries = 2))
             scroll.seal()
             shelf.awaitEvents(1)
             scribe.close()
@@ -148,27 +148,27 @@ class ScribeRuntimeTest {
     }
 
     @Test
-    fun put_throws_for_custom_object_without_serializer() {
+    fun write_throws_for_custom_object_without_serializer() {
         runSuspend {
             val shelf = RecordingShelf()
             val scribe = scribeWithScrollShelves(shelf)
             val scroll = scribe.unrollScroll()
 
             assertFailsWith<IllegalArgumentException> {
-                scroll.putSerializable("meta", NonSerializableMeta(retries = 2))
+                scroll.writeSerializable("meta", NonSerializableMeta(retries = 2))
             }
         }
     }
 
     @Test
-    fun putNumber_throws_for_non_finite_values() {
+    fun writeNumber_throws_for_non_finite_values() {
         runSuspend {
             val shelf = RecordingShelf()
             val scribe = scribeWithScrollShelves(shelf)
             val scroll = scribe.unrollScroll()
 
             assertFailsWith<IllegalArgumentException> {
-                scroll.putNumber("latency_ms", Double.NaN)
+                scroll.writeNumber("latency_ms", Double.NaN)
             }
         }
     }
@@ -192,7 +192,7 @@ class ScribeRuntimeTest {
             val scribe = scribeWithScrollShelves(shelf)
             val scroll = scribe.unrollScroll(id = "session-42")
 
-            scroll.putString("operation", "sync")
+            scroll.writeString("operation", "sync")
             scroll.seal()
             shelf.awaitEvents(1)
             scribe.close()
@@ -266,14 +266,14 @@ class ScribeRuntimeTest {
     }
 
     @Test
-    fun scroll_put_goes_to_data_field_separate_from_context() {
+    fun scroll_write_goes_to_data_field_separate_from_context() {
         runSuspend {
             val shelf = RecordingShelf()
             val contextData = mapOf("region" to JsonPrimitive("us-east"))
             val scribe = scribeWithScrollShelves(shelf, contextData = contextData)
             val scroll = scribe.unrollScroll()
 
-            scroll.putString("region", "ap-south")
+            scroll.writeString("region", "ap-south")
             scroll.seal()
             shelf.awaitEvents(1)
             scribe.close()
@@ -285,7 +285,7 @@ class ScribeRuntimeTest {
     }
 
     @Test
-    fun getScrolls_returns_same_scroll_reference_with_shared_updates() {
+    fun seekScrolls_returns_same_scroll_reference_with_shared_updates() {
         runSuspend {
             val shelf = RecordingShelf()
             val scribe = scribeWithScrollShelves(shelf)
@@ -420,10 +420,10 @@ class ScribeRuntimeTest {
             val shelf = RecordingShelf()
             val timestampMargin = object : Margin {
                 override fun header(scroll: Scroll) {
-                    scroll.putNumber("startedAtEpochMs", 1000L)
+                    scroll.writeNumber("startedAtEpochMs", 1000L)
                 }
                 override fun footer(scroll: Scroll) {
-                    scroll.putNumber("sealedAtEpochMs", 2000L)
+                    scroll.writeNumber("sealedAtEpochMs", 2000L)
                 }
             }
             val scribe = scribeWithScrollShelves(shelf, margins = timestampMargin)
@@ -462,13 +462,13 @@ class ScribeRuntimeTest {
             val shelf = RecordingShelf()
             val elapsedMargin = object : Margin {
                 override fun header(scroll: Scroll) {
-                    scroll.putNumber("_startTime", 1000L)
+                    scroll.writeNumber("_startTime", 1000L)
                 }
                 override fun footer(scroll: Scroll) {
-                    val startExists = scroll.get("_startTime") != null
+                    val startExists = scroll.read("_startTime") != null
                     if (startExists) {
-                        scroll.remove("_startTime")
-                        scroll.putNumber("elapsedMs", 500L)
+                        scroll.erase("_startTime")
+                        scroll.writeNumber("elapsedMs", 500L)
                     }
                 }
             }
@@ -505,31 +505,31 @@ class ScribeRuntimeTest {
     }
 
     @Test
-    fun scroll_get_and_remove_work() {
+    fun scroll_read_and_erase_work() {
         runSuspend {
             val shelf = RecordingShelf()
             val scribe = scribeWithScrollShelves(shelf)
             val scroll = scribe.unrollScroll()
 
-            scroll.putString("key", "value")
-            assertEquals(JsonPrimitive("value"), scroll.get("key"))
-            val removed = scroll.remove("key")
+            scroll.writeString("key", "value")
+            assertEquals(JsonPrimitive("value"), scroll.read("key"))
+            val removed = scroll.erase("key")
             assertEquals(JsonPrimitive("value"), removed)
-            assertNull(scroll.get("key"))
+            assertNull(scroll.read("key"))
             scribe.close()
         }
     }
 
     @Test
-    fun get_and_remove_on_sealed_scroll_return_null() {
+    fun read_and_erase_on_sealed_scroll_return_null() {
         runSuspend {
             val shelf = RecordingShelf()
             val scribe = scribeWithScrollShelves(shelf)
             val scroll = scribe.unrollScroll()
 
-            scroll.putString("key", "value")
+            scroll.writeString("key", "value")
             scroll.seal()
-            assertNull(scroll.remove("key"))
+            assertNull(scroll.erase("key"))
             shelf.awaitEvents(1)
             scribe.close()
 
@@ -541,13 +541,13 @@ class ScribeRuntimeTest {
     private class PaymentService {
         suspend fun pay(orderId: String, scroll: Scroll) {
             try {
-                scroll.putSerializable("scrollId", scroll.id)
+                scroll.writeSerializable("scrollId", scroll.id)
                 if (orderId == "order2") {
                     throw IllegalStateException("order2 failed")
                 }
-                scroll.putSerializable("gateway", "stripe")
+                scroll.writeSerializable("gateway", "stripe")
             } catch (t: Throwable) {
-                scroll.putSerializable("error_stage", "gateway_call")
+                scroll.writeSerializable("error_stage", "gateway_call")
                 scroll.seal(success = false, error = t)
                 throw t
             }

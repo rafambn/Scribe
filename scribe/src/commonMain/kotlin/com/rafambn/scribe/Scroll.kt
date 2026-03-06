@@ -45,35 +45,35 @@ class Scroll internal constructor(
         return result
     }
 
-    fun putString(key: String, value: String) {
-        putResolved(key, JsonPrimitive(value))
+    fun writeString(key: String, value: String) {
+        writeResolved(key, JsonPrimitive(value))
     }
 
-    fun putNumber(key: String, value: Number) {
+    fun writeNumber(key: String, value: Number) {
         ensureFinite(key, value)
-        putResolved(key, JsonPrimitive(value))
+        writeResolved(key, JsonPrimitive(value))
     }
 
-    fun putBoolean(key: String, value: Boolean) {
-        putResolved(key, JsonPrimitive(value))
+    fun writeBoolean(key: String, value: Boolean) {
+        writeResolved(key, JsonPrimitive(value))
     }
 
     @OptIn(ExperimentalSerializationApi::class)
-    inline fun <reified T : Any> putSerializable(key: String, value: T) {
+    inline fun <reified T : Any> writeSerializable(key: String, value: T) {
         val serializer = serializerOrNull(typeOf<T>())
             ?: throw IllegalArgumentException("No serializer found for key '$key' and type '${typeOf<T>()}'.")
-        putResolved(key, Json.encodeToJsonElement(serializer, value))
+        writeResolved(key, Json.encodeToJsonElement(serializer, value))
     }
 
-    fun get(key: String): JsonElement? = _data[key] ?: sharedContext[key]
+    fun read(key: String): JsonElement? = _data[key] ?: sharedContext[key]
 
-    fun remove(key: String): JsonElement? {
+    fun erase(key: String): JsonElement? {
         if (sealed) return null
         return _data.remove(key)
     }
 
     @PublishedApi
-    internal fun putResolved(key: String, value: JsonElement) {
+    internal fun writeResolved(key: String, value: JsonElement) {
         if (sealed) return
         _data[key] = value
     }

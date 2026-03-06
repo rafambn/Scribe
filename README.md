@@ -56,9 +56,9 @@ val scribe = Scribe(
 )
 
 val scroll = scribe.unrollScroll(id = "checkout-42")
-scroll.putString("gateway", "stripe")
-scroll.putNumber("attempt", 1)
-scroll.putBoolean("retry", false)
+scroll.writeString("gateway", "stripe")
+scroll.writeNumber("attempt", 1)
+scroll.writeBoolean("retry", false)
 scroll.seal(success = true)
 ```
 
@@ -91,11 +91,11 @@ val recordSaver = RecordSaver { record -> println(record) }
 ```kotlin
 val timingMargin = object : Margin {
     override fun header(scroll: Scroll) {
-        scroll.putNumber("startedAtEpochMs", 1000L)
+        scroll.writeNumber("startedAtEpochMs", 1000L)
     }
 
     override fun footer(scroll: Scroll) {
-        scroll.putNumber("sealedAtEpochMs", 2000L)
+        scroll.writeNumber("sealedAtEpochMs", 2000L)
     }
 }
 ```
@@ -118,6 +118,21 @@ val scribe = Scribe(
 ```
 
 Use `tryNote()` and `trySeal()` when you want a non-suspending best-effort call.
+
+## Uncaught Exceptions
+
+`Scribe` can install a platform uncaught exception hook through `onUncaughtException`.
+
+```kotlin
+val scribe = Scribe(
+    shelves = listOf(recordSaver),
+    onUncaughtException = { throwable ->
+        println("Uncaught exception: ${throwable.message}")
+    }
+)
+```
+
+Use this when you want the logger to observe crashes that escape normal application flow.
 
 ## Status
 
