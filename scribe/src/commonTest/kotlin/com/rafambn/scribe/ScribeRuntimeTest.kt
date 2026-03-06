@@ -29,7 +29,7 @@ class ScribeRuntimeTest {
             assertEquals(1, scribe.getScrolls().size)
             assertSame(scroll, scribe.getScrolls().single())
 
-            scroll.put("method", "card")
+            scroll.putSerializable("method", "card")
             scroll.seal(success = true)
             scribe.close()
 
@@ -48,7 +48,7 @@ class ScribeRuntimeTest {
             val scribe = scribeWithScrollShelves(shelf)
             val scroll = scribe.startScroll()
 
-            scroll.put("gateway", "stripe")
+            scroll.putSerializable("gateway", "stripe")
             assertFalse(scroll.isSealed)
 
             scroll.seal(success = false, error = IllegalStateException("fail"))
@@ -111,7 +111,7 @@ class ScribeRuntimeTest {
             val scribe = scribeWithScrollShelves(shelf)
             val scroll = scribe.startScroll()
 
-            scroll.put("meta", GatewayMeta(retries = 2))
+            scroll.putSerializable("meta", GatewayMeta(retries = 2))
             scroll.seal()
             scribe.close()
 
@@ -131,7 +131,6 @@ class ScribeRuntimeTest {
             scroll.putNumber("attempt", 3)
             scroll.putBoolean("retry", false)
             scroll.putSerializable("meta", GatewayMeta(retries = 2))
-            scroll.putObject("details", GatewayMeta(retries = 5))
             scroll.seal()
             scribe.close()
 
@@ -140,7 +139,6 @@ class ScribeRuntimeTest {
             assertEquals(JsonPrimitive(3), event.data["attempt"])
             assertEquals(JsonPrimitive(false), event.data["retry"])
             assertEquals(JsonObject(mapOf("retries" to JsonPrimitive(2))), event.data["meta"])
-            assertEquals(JsonObject(mapOf("retries" to JsonPrimitive(5))), event.data["details"])
         }
     }
 
@@ -152,20 +150,7 @@ class ScribeRuntimeTest {
             val scroll = scribe.startScroll()
 
             assertFailsWith<IllegalArgumentException> {
-                scroll.put("meta", NonSerializableMeta(retries = 2))
-            }
-        }
-    }
-
-    @Test
-    fun putObject_throws_for_non_object_json_values() {
-        runSuspend {
-            val shelf = RecordingShelf()
-            val scribe = scribeWithScrollShelves(shelf)
-            val scroll = scribe.startScroll()
-
-            assertFailsWith<IllegalArgumentException> {
-                scroll.putObject("attempt", 2)
+                scroll.putSerializable("meta", NonSerializableMeta(retries = 2))
             }
         }
     }
@@ -514,13 +499,13 @@ class ScribeRuntimeTest {
     private class PaymentService {
         suspend fun pay(orderId: String, scroll: Scroll) {
             try {
-                scroll.put("scrollId", scroll.id)
+                scroll.putSerializable("scrollId", scroll.id)
                 if (orderId == "order2") {
                     throw IllegalStateException("order2 failed")
                 }
-                scroll.put("gateway", "stripe")
+                scroll.putSerializable("gateway", "stripe")
             } catch (t: Throwable) {
-                scroll.put("error_stage", "gateway_call")
+                scroll.putSerializable("error_stage", "gateway_call")
                 scroll.seal(success = false, error = t)
                 throw t
             }
