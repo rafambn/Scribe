@@ -16,7 +16,7 @@ class Scribe(
     private val shelf: List<Saver<*>>,
     private val _contextData: Map<String, JsonElement> = emptyMap(),
     private val processConfig: ScribeProcessConfig = ScribeProcessConfig(),
-    private val margins: Margin? = null,
+    internal val margins: Margin? = null,
     onUncaughtException: ((Throwable) -> Unit)? = null,
 ) : AutoCloseable {
     private val scrollsById = mutableMapOf<String, Scroll>()

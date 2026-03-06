@@ -5,6 +5,7 @@ import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlin.test.Test
@@ -219,9 +220,11 @@ class ScribeRuntimeTest {
     @Test
     fun startScroll_includes_context_data_in_event() {
         val shelf = RecordingShelf()
-        val scribe = scribeWithScrollShelves(shelf)
-        scribe.putContext("service", JsonPrimitive("mobile-app"))
-        scribe.putContext("environment", JsonPrimitive("production"))
+        val contextData = mapOf(
+            "service" to JsonPrimitive("mobile-app"),
+            "environment" to JsonPrimitive("production"),
+        )
+        val scribe = scribeWithScrollShelves(shelf, contextData = contextData)
 
         val scroll = scribe.startScroll()
 
@@ -236,13 +239,12 @@ class ScribeRuntimeTest {
     }
 
     @Test
-    fun startScroll_uses_context_snapshot_at_creation_time() {
+    fun all_scrolls_share_same_context() {
         val shelf = RecordingShelf()
-        val scribe = scribeWithScrollShelves(shelf)
-        scribe.putContext("region", JsonPrimitive("us-east"))
+        val contextData = mapOf("region" to JsonPrimitive("us-east"))
+        val scribe = scribeWithScrollShelves(shelf, contextData = contextData)
 
         val firstScroll = scribe.startScroll(id = "first")
-        scribe.putContext("region", JsonPrimitive("eu-west"))
         val secondScroll = scribe.startScroll(id = "second")
 
         runSuspend {
@@ -257,14 +259,14 @@ class ScribeRuntimeTest {
         assertNotNull(firstEvent)
         assertNotNull(secondEvent)
         assertEquals(JsonPrimitive("us-east"), firstEvent.context["region"])
-        assertEquals(JsonPrimitive("eu-west"), secondEvent.context["region"])
+        assertEquals(JsonPrimitive("us-east"), secondEvent.context["region"])
     }
 
     @Test
     fun scroll_put_goes_to_data_field_separate_from_context() {
         val shelf = RecordingShelf()
-        val scribe = scribeWithScrollShelves(shelf)
-        scribe.putContext("region", JsonPrimitive("us-east"))
+        val contextData = mapOf("region" to JsonPrimitive("us-east"))
+        val scribe = scribeWithScrollShelves(shelf, contextData = contextData)
         val scroll = scribe.startScroll()
 
         runSuspend {
@@ -622,10 +624,12 @@ private val UUID_REGEX =
 
 private fun scribeWithScrollShelves(
     vararg shelves: ScrollSaver,
+    contextData: Map<String, JsonElement> = emptyMap(),
     processConfig: ScribeProcessConfig = ScribeProcessConfig(),
     margins: Margin? = null,
 ): Scribe = Scribe(
     shelf = shelves.toList(),
+    _contextData = contextData,
     processConfig = processConfig,
     margins = margins,
 )
