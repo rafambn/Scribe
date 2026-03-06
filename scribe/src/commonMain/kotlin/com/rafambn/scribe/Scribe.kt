@@ -45,8 +45,7 @@ class Scribe(
                 }
             }
         }
-        queue.invokeOnClose {
-            processorJob.cancel()
+        processorJob.invokeOnCompletion {
             processScope.cancel()
         }
     }

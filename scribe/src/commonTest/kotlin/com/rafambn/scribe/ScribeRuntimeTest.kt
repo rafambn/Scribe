@@ -2,6 +2,7 @@ package com.rafambn.scribe
 
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.channels.BufferOverflow
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.Serializable
@@ -31,6 +32,7 @@ class ScribeRuntimeTest {
 
             scroll.putSerializable("method", "card")
             scroll.seal(success = true)
+            shelf.awaitEvents(1)
             scribe.close()
 
             assertEquals(1, shelf.events.size)
@@ -53,6 +55,7 @@ class ScribeRuntimeTest {
 
             scroll.seal(success = false, error = IllegalStateException("fail"))
             scroll.seal(success = true)
+            shelf.awaitEvents(1)
             scribe.close()
 
             assertTrue(scroll.isSealed)
@@ -82,6 +85,7 @@ class ScribeRuntimeTest {
             }
             scroll1.seal(success = true)
             scroll2.seal(success = true)
+            shelf.awaitEvents(2)
             scribe.close()
 
             assertEquals(2, shelf.events.size)
@@ -113,6 +117,7 @@ class ScribeRuntimeTest {
 
             scroll.putSerializable("meta", GatewayMeta(retries = 2))
             scroll.seal()
+            shelf.awaitEvents(1)
             scribe.close()
 
             val event = shelf.events.single()
@@ -132,6 +137,7 @@ class ScribeRuntimeTest {
             scroll.putBoolean("retry", false)
             scroll.putSerializable("meta", GatewayMeta(retries = 2))
             scroll.seal()
+            shelf.awaitEvents(1)
             scribe.close()
 
             val event = shelf.events.single()
@@ -189,6 +195,7 @@ class ScribeRuntimeTest {
 
             scroll.putString("operation", "sync")
             scroll.seal()
+            shelf.awaitEvents(1)
             scribe.close()
 
             val event = shelf.events.single()
@@ -225,6 +232,7 @@ class ScribeRuntimeTest {
             val scroll = scribe.startScroll()
 
             scroll.seal()
+            shelf.awaitEvents(1)
             scribe.close()
 
             val event = shelf.events.single()
@@ -245,6 +253,7 @@ class ScribeRuntimeTest {
 
             firstScroll.seal()
             secondScroll.seal()
+            shelf.awaitEvents(2)
             scribe.close()
 
             val firstEvent = shelf.events.firstOrNull { it.scrollId == "first" }
@@ -267,6 +276,7 @@ class ScribeRuntimeTest {
 
             scroll.putString("region", "ap-south")
             scroll.seal()
+            shelf.awaitEvents(1)
             scribe.close()
 
             val event = shelf.events.single()
@@ -284,6 +294,8 @@ class ScribeRuntimeTest {
             val scroll = scribe.startScroll(id = "scroll-a")
 
             scroll.seal()
+            shelf1.awaitEvents(1)
+            shelf2.awaitEvents(1)
             scribe.close()
 
             assertEquals(1, shelf1.events.size)
@@ -308,6 +320,9 @@ class ScribeRuntimeTest {
 
             scribe.note(tag = "payments", message = "started", level = LogLevel.INFO, timestamp = 100L)
             scribe.startScroll(id = "scroll-1").seal()
+            scrollShelf.awaitEvents(1)
+            noteSaver.awaitEvents(1)
+            allSaver.awaitEvents(2)
             scribe.close()
 
             assertEquals(1, scrollShelf.events.size)
@@ -333,6 +348,7 @@ class ScribeRuntimeTest {
             assertEquals(0, shelf.events.size)
 
             gate.complete(Unit)
+            shelf.awaitEvents(1)
             scribe.close()
             assertEquals(1, shelf.events.size)
         }
@@ -347,6 +363,7 @@ class ScribeRuntimeTest {
             scribe.startScroll(id = "first").seal()
             delay(500)
             scribe.startScroll(id = "second").seal()
+            shelf.awaitEvents(2)
             scribe.close()
 
             assertEquals(2, shelf.events.size)
@@ -359,17 +376,20 @@ class ScribeRuntimeTest {
     fun drop_latest_overflow_can_drop_events_under_pressure() {
         runSuspend {
             val gate = CompletableDeferred<Unit>()
-            val shelf = BlockingShelf(gate)
+            val firstWriteStarted = CompletableDeferred<Unit>()
+            val shelf = BlockingShelf(gate, firstWriteStarted)
             val scribe = scribeWithScrollShelves(
                 shelf,
                 processConfig = ScribeProcessConfig(bufferSize = 1, overflowStrategy = BufferOverflow.DROP_LATEST),
             )
 
             scribe.startScroll(id = "one").seal()
+            firstWriteStarted.await()
             scribe.startScroll(id = "two").seal()
             scribe.startScroll(id = "three").seal()
 
             gate.complete(Unit)
+            shelf.awaitEvents(1)
             scribe.close()
 
             assertFalse(shelf.events.any { it.scrollId == "three" })
@@ -392,6 +412,7 @@ class ScribeRuntimeTest {
             val scroll = scribe.startScroll()
 
             scroll.seal()
+            shelf.awaitEvents(1)
             scribe.close()
 
             val event = shelf.events.single()
@@ -408,6 +429,7 @@ class ScribeRuntimeTest {
             val scroll = scribe.startScroll()
 
             scroll.seal()
+            shelf.awaitEvents(1)
             scribe.close()
 
             val event = shelf.events.single()
@@ -436,6 +458,7 @@ class ScribeRuntimeTest {
             val scroll = scribe.startScroll()
 
             scroll.seal()
+            shelf.awaitEvents(1)
             scribe.close()
 
             val event = shelf.events.single()
@@ -489,6 +512,7 @@ class ScribeRuntimeTest {
             scroll.putString("key", "value")
             scroll.seal()
             assertNull(scroll.remove("key"))
+            shelf.awaitEvents(1)
             scribe.close()
 
             val event = shelf.events.single()
@@ -519,36 +543,70 @@ class ScribeRuntimeTest {
 
     private class RecordingShelf : ScrollSaver {
         val events = mutableListOf<SealedScroll>()
+        private val writes = Channel<Unit>(Channel.UNLIMITED)
 
         override suspend fun write(event: SealedScroll) {
             events += event
+            writes.trySend(Unit)
+        }
+
+        suspend fun awaitEvents(count: Int) {
+            repeat(count) {
+                writes.receive()
+            }
         }
     }
 
     private class BlockingShelf(
         private val gate: CompletableDeferred<Unit>,
+        private val firstWriteStarted: CompletableDeferred<Unit>? = null,
     ) : ScrollSaver {
         val events = mutableListOf<SealedScroll>()
+        private val writes = Channel<Unit>(Channel.UNLIMITED)
 
         override suspend fun write(event: SealedScroll) {
+            firstWriteStarted?.complete(Unit)
             gate.await()
             events += event
+            writes.trySend(Unit)
+        }
+
+        suspend fun awaitEvents(count: Int) {
+            repeat(count) {
+                writes.receive()
+            }
         }
     }
 
     private class RecordingNoteSaver : NoteSaver {
         val events = mutableListOf<Note>()
+        private val writes = Channel<Unit>(Channel.UNLIMITED)
 
         override suspend fun write(event: Note) {
             events += event
+            writes.trySend(Unit)
+        }
+
+        suspend fun awaitEvents(count: Int) {
+            repeat(count) {
+                writes.receive()
+            }
         }
     }
 
     private class RecordingRecordSaver : RecordSaver {
         val events = mutableListOf<Record>()
+        private val writes = Channel<Unit>(Channel.UNLIMITED)
 
         override suspend fun write(event: Record) {
             events += event
+            writes.trySend(Unit)
+        }
+
+        suspend fun awaitEvents(count: Int) {
+            repeat(count) {
+                writes.receive()
+            }
         }
     }
 }
