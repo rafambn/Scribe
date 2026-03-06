@@ -33,8 +33,8 @@ enum class LogLevel {
     ERROR
 }
 
-data class ScribeProcessConfig(
+data class ScribeDeliveryConfig(
     val bufferSize: Int = 256,
     val overflowStrategy: BufferOverflow = BufferOverflow.DROP_OLDEST,
-    val onSinkError: (saver: Saver<*>, record: Record, error: Throwable) -> Unit = { _, _, _ -> },
+    val onSaverError: (saver: Saver<*>, record: Record, error: Throwable) -> Unit = { _, _, _ -> },
 )

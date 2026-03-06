@@ -1,19 +1,124 @@
-[![official project](http://jb.gg/badges/official.svg)](https://github.com/JetBrains#jetbrains-on-github)
+# Scribe
 
-# Multiplatform library template
+`Scribe` is a Kotlin Multiplatform logging library with a lore-driven API.
 
-## What is it?
+- A `Scribe` writes logs
+- A `Note` is a single log line
+- A `Scroll` collects context across a flow
+- A `SealedScroll` is the final immutable result
+- `Saver`s place notes and scrolls onto `shelves` such as console, database, or HTTP backends
 
-This repository contains a simple library project, intended to demonstrate a [Kotlin Multiplatform](https://kotlinlang.org/docs/multiplatform.html) library that is deployable to [Maven Central](https://central.sonatype.com/).
+## Terminology
 
-The library has only one function: generate the [Fibonacci sequence](https://en.wikipedia.org/wiki/Fibonacci_sequence) starting from platform-provided numbers. Also, it has a test for each platform just to be sure that tests run.
+- `note(...)`: suspend function for delivering a single log entry
+- `tryNote(...)`: best-effort non-suspending variant
+- `unrollScroll(...)`: starts a contextual log
+- `seal(...)`: finalizes a scroll and emits a `SealedScroll`
+- `trySeal(...)`: best-effort non-suspending variant
+- `Margin`: hook that can add fields when a scroll starts or seals
+- `ScribeDeliveryConfig`: queue and overflow behavior for async delivery
 
-Note that no other actions or tools usually required for the library development are set up, such as [tracking of backwards compatibility](https://kotlinlang.org/docs/jvm-api-guidelines-backward-compatibility.html#tools-designed-to-enforce-backward-compatibility), explicit API mode, licensing, contribution guideline, code of conduct and others. You can find a guide for best practices for designing Kotlin libraries [here](https://kotlinlang.org/docs/api-guidelines-introduction.html).
+## Installation
 
-## Guide
+The library is not published yet. Add the `scribe` module directly or publish it from this repository.
 
-Please find the detailed guide [here](https://www.jetbrains.com/help/kotlin-multiplatform-dev/multiplatform-publish-libraries.html).
+## Create Notes
 
-# Other resources
-* [Publishing via the Central Portal](https://central.sonatype.org/publish-ea/publish-ea-guide/)
-* [Gradle Maven Publish Plugin \- Publishing to Maven Central](https://vanniktech.github.io/gradle-maven-publish-plugin/central/)
+```kotlin
+val scribe = Scribe(
+    shelves = listOf(
+        NoteSaver { note ->
+            println("[${note.level}] ${note.tag}: ${note.message}")
+        }
+    )
+)
+
+scribe.note(
+    tag = "payments",
+    message = "starting checkout",
+    level = LogLevel.INFO,
+)
+```
+
+## Create Scrolls
+
+```kotlin
+val scribe = Scribe(
+    shelves = listOf(
+        ScrollSaver { scroll ->
+            println(scroll)
+        }
+    ),
+    contextData = mapOf(
+        "service" to JsonPrimitive("billing"),
+        "environment" to JsonPrimitive("production"),
+    )
+)
+
+val scroll = scribe.unrollScroll(id = "checkout-42")
+scroll.putString("gateway", "stripe")
+scroll.putNumber("attempt", 1)
+scroll.putBoolean("retry", false)
+scroll.seal(success = true)
+```
+
+The emitted `SealedScroll` contains:
+
+- `scrollId`
+- `success`
+- `errorMessage`
+- shared `context`
+- scroll-specific `data`
+
+## Saver Types
+
+Use the saver that matches the output you want:
+
+```kotlin
+val noteSaver = NoteSaver { note -> println(note) }
+val scrollSaver = ScrollSaver { scroll -> println(scroll) }
+val recordSaver = RecordSaver { record -> println(record) }
+```
+
+- `NoteSaver` receives only `Note`
+- `ScrollSaver` receives only `SealedScroll`
+- `RecordSaver` receives both
+
+## Margins
+
+`Margin` lets you enrich a scroll at the beginning and end of its lifecycle.
+
+```kotlin
+val timingMargin = object : Margin {
+    override fun header(scroll: Scroll) {
+        scroll.putNumber("startedAtEpochMs", 1000L)
+    }
+
+    override fun footer(scroll: Scroll) {
+        scroll.putNumber("sealedAtEpochMs", 2000L)
+    }
+}
+```
+
+## Delivery
+
+`Scribe` delivers records through an internal channel processed on a coroutine scope.
+
+```kotlin
+val scribe = Scribe(
+    shelves = listOf(recordSaver),
+    deliveryConfig = ScribeDeliveryConfig(
+        bufferSize = 256,
+        overflowStrategy = BufferOverflow.DROP_OLDEST,
+        onSaverError = { saver, record, error ->
+            println("Saver $saver failed for $record: $error")
+        }
+    )
+)
+```
+
+Use `tryNote()` and `trySeal()` when you want a non-suspending best-effort call.
+
+## Status
+
+This repository is still under active design. Backward compatibility is not guaranteed yet.

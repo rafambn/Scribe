@@ -20,13 +20,12 @@ import kotlin.test.assertTrue
 
 class ScribeRuntimeTest {
     @Test
-    fun startScroll_creates_scroll_for_the_given_shelf() {
+    fun unrollScroll_creates_scroll_for_the_given_shelf() {
         runSuspend {
             val shelf = RecordingShelf()
             val scribe = scribeWithScrollShelves(shelf)
-            val scroll = scribe.startScroll()
+            val scroll = scribe.unrollScroll()
 
-            assertSame(scribe, scroll.context)
             assertEquals(1, scribe.getScrolls().size)
             assertSame(scroll, scribe.getScrolls().single())
 
@@ -48,7 +47,7 @@ class ScribeRuntimeTest {
         runSuspend {
             val shelf = RecordingShelf()
             val scribe = scribeWithScrollShelves(shelf)
-            val scroll = scribe.startScroll()
+            val scroll = scribe.unrollScroll()
 
             scroll.putSerializable("gateway", "stripe")
             assertFalse(scroll.isSealed)
@@ -76,8 +75,8 @@ class ScribeRuntimeTest {
             val scribe = scribeWithScrollShelves(shelf)
             val paymentService = PaymentService()
 
-            val scroll1 = scribe.startScroll()
-            val scroll2 = scribe.startScroll()
+            val scroll1 = scribe.unrollScroll()
+            val scroll2 = scribe.unrollScroll()
 
             paymentService.pay("order1", scroll1)
             assertFailsWith<IllegalStateException> {
@@ -113,7 +112,7 @@ class ScribeRuntimeTest {
         runSuspend {
             val shelf = RecordingShelf()
             val scribe = scribeWithScrollShelves(shelf)
-            val scroll = scribe.startScroll()
+            val scroll = scribe.unrollScroll()
 
             scroll.putSerializable("meta", GatewayMeta(retries = 2))
             scroll.seal()
@@ -130,7 +129,7 @@ class ScribeRuntimeTest {
         runSuspend {
             val shelf = RecordingShelf()
             val scribe = scribeWithScrollShelves(shelf)
-            val scroll = scribe.startScroll()
+            val scroll = scribe.unrollScroll()
 
             scroll.putString("message", "accepted")
             scroll.putNumber("attempt", 3)
@@ -153,7 +152,7 @@ class ScribeRuntimeTest {
         runSuspend {
             val shelf = RecordingShelf()
             val scribe = scribeWithScrollShelves(shelf)
-            val scroll = scribe.startScroll()
+            val scroll = scribe.unrollScroll()
 
             assertFailsWith<IllegalArgumentException> {
                 scroll.putSerializable("meta", NonSerializableMeta(retries = 2))
@@ -166,7 +165,7 @@ class ScribeRuntimeTest {
         runSuspend {
             val shelf = RecordingShelf()
             val scribe = scribeWithScrollShelves(shelf)
-            val scroll = scribe.startScroll()
+            val scroll = scribe.unrollScroll()
 
             assertFailsWith<IllegalArgumentException> {
                 scroll.putNumber("latency_ms", Double.NaN)
@@ -179,7 +178,7 @@ class ScribeRuntimeTest {
         runSuspend {
             val shelf = RecordingShelf()
             val scribe = scribeWithScrollShelves(shelf)
-            val ids = (1..500).map { scribe.startScroll().id }
+            val ids = (1..500).map { scribe.unrollScroll().id }
 
             assertEquals(ids.size, ids.toSet().size)
             assertTrue(ids.all { UUID_REGEX.matches(it) })
@@ -187,11 +186,11 @@ class ScribeRuntimeTest {
     }
 
     @Test
-    fun startScroll_uses_custom_id() {
+    fun unrollScroll_uses_custom_id() {
         runSuspend {
             val shelf = RecordingShelf()
             val scribe = scribeWithScrollShelves(shelf)
-            val scroll = scribe.startScroll(id = "session-42")
+            val scroll = scribe.unrollScroll(id = "session-42")
 
             scroll.putString("operation", "sync")
             scroll.seal()
@@ -205,14 +204,14 @@ class ScribeRuntimeTest {
     }
 
     @Test
-    fun startScroll_throws_when_custom_id_already_exists() {
+    fun unrollScroll_throws_when_custom_id_already_exists() {
         runSuspend {
             val shelf = RecordingShelf()
             val scribe = scribeWithScrollShelves(shelf)
-            scribe.startScroll(id = "session-42")
+            scribe.unrollScroll(id = "session-42")
 
             val thrown = assertFailsWith<IllegalArgumentException> {
-                scribe.startScroll(id = "session-42")
+                scribe.unrollScroll(id = "session-42")
             }
 
             assertEquals("A scroll with id 'session-42' already exists.", thrown.message)
@@ -220,7 +219,7 @@ class ScribeRuntimeTest {
     }
 
     @Test
-    fun startScroll_includes_context_data_in_event() {
+    fun unrollScroll_includes_context_data_in_event() {
         runSuspend {
             val shelf = RecordingShelf()
             val contextData = mapOf(
@@ -229,7 +228,7 @@ class ScribeRuntimeTest {
             )
             val scribe = scribeWithScrollShelves(shelf, contextData = contextData)
 
-            val scroll = scribe.startScroll()
+            val scroll = scribe.unrollScroll()
 
             scroll.seal()
             shelf.awaitEvents(1)
@@ -248,8 +247,8 @@ class ScribeRuntimeTest {
             val contextData = mapOf("region" to JsonPrimitive("us-east"))
             val scribe = scribeWithScrollShelves(shelf, contextData = contextData)
 
-            val firstScroll = scribe.startScroll(id = "first")
-            val secondScroll = scribe.startScroll(id = "second")
+            val firstScroll = scribe.unrollScroll(id = "first")
+            val secondScroll = scribe.unrollScroll(id = "second")
 
             firstScroll.seal()
             secondScroll.seal()
@@ -272,7 +271,7 @@ class ScribeRuntimeTest {
             val shelf = RecordingShelf()
             val contextData = mapOf("region" to JsonPrimitive("us-east"))
             val scribe = scribeWithScrollShelves(shelf, contextData = contextData)
-            val scroll = scribe.startScroll()
+            val scroll = scribe.unrollScroll()
 
             scroll.putString("region", "ap-south")
             scroll.seal()
@@ -286,12 +285,31 @@ class ScribeRuntimeTest {
     }
 
     @Test
+    fun getScrolls_returns_same_scroll_reference_with_shared_updates() {
+        runSuspend {
+            val shelf = RecordingShelf()
+            val scribe = scribeWithScrollShelves(shelf)
+            val originalScroll = scribe.unrollScroll(id = "shared")
+
+            originalScroll.putString("stage", "created")
+            val sameScroll = scribe.getScrolls().single()
+
+            originalScroll.putString("status", "updated")
+
+            assertSame(originalScroll, sameScroll)
+            assertEquals(JsonPrimitive("created"), sameScroll.get("stage"))
+            assertEquals(JsonPrimitive("updated"), sameScroll.get("status"))
+            scribe.close()
+        }
+    }
+
+    @Test
     fun events_are_dispatched_to_multiple_sinks() {
         runSuspend {
             val shelf1 = RecordingShelf()
             val shelf2 = RecordingShelf()
             val scribe = scribeWithScrollShelves(shelf1, shelf2)
-            val scroll = scribe.startScroll(id = "scroll-a")
+            val scroll = scribe.unrollScroll(id = "scroll-a")
 
             scroll.seal()
             shelf1.awaitEvents(1)
@@ -311,15 +329,15 @@ class ScribeRuntimeTest {
             val noteSaver = RecordingNoteSaver()
             val allSaver = RecordingRecordSaver()
             val scribe = Scribe(
-                shelf = listOf(
+                shelves = listOf(
                     scrollShelf,
                     noteSaver,
                     allSaver,
                 ),
             )
 
-            scribe.note(tag = "payments", message = "started", level = LogLevel.INFO, timestamp = 100L)
-            scribe.startScroll(id = "scroll-1").seal()
+            scribe.tryNote(tag = "payments", message = "started", level = LogLevel.INFO, timestamp = 100L)
+            scribe.unrollScroll(id = "scroll-1").seal()
             scrollShelf.awaitEvents(1)
             noteSaver.awaitEvents(1)
             allSaver.awaitEvents(2)
@@ -340,9 +358,9 @@ class ScribeRuntimeTest {
             val shelf = BlockingShelf(gate)
             val scribe = scribeWithScrollShelves(
                 shelf,
-                processConfig = ScribeProcessConfig(bufferSize = 4, overflowStrategy = BufferOverflow.DROP_OLDEST),
+                deliveryConfig = ScribeDeliveryConfig(bufferSize = 4, overflowStrategy = BufferOverflow.DROP_OLDEST),
             )
-            val scroll = scribe.startScroll(id = "slow")
+            val scroll = scribe.unrollScroll(id = "slow")
 
             scroll.seal()
             assertEquals(0, shelf.events.size)
@@ -360,9 +378,9 @@ class ScribeRuntimeTest {
             val shelf = RecordingShelf()
             val scribe = scribeWithScrollShelves(shelf)
 
-            scribe.startScroll(id = "first").seal()
+            scribe.unrollScroll(id = "first").seal()
             delay(500)
-            scribe.startScroll(id = "second").seal()
+            scribe.unrollScroll(id = "second").seal()
             shelf.awaitEvents(2)
             scribe.close()
 
@@ -380,13 +398,13 @@ class ScribeRuntimeTest {
             val shelf = BlockingShelf(gate, firstWriteStarted)
             val scribe = scribeWithScrollShelves(
                 shelf,
-                processConfig = ScribeProcessConfig(bufferSize = 1, overflowStrategy = BufferOverflow.DROP_LATEST),
+                deliveryConfig = ScribeDeliveryConfig(bufferSize = 1, overflowStrategy = BufferOverflow.DROP_LATEST),
             )
 
-            scribe.startScroll(id = "one").seal()
+            scribe.unrollScroll(id = "one").seal()
             firstWriteStarted.await()
-            scribe.startScroll(id = "two").seal()
-            scribe.startScroll(id = "three").seal()
+            scribe.unrollScroll(id = "two").seal()
+            scribe.unrollScroll(id = "three").seal()
 
             gate.complete(Unit)
             shelf.awaitEvents(1)
@@ -409,7 +427,7 @@ class ScribeRuntimeTest {
                 }
             }
             val scribe = scribeWithScrollShelves(shelf, margins = timestampMargin)
-            val scroll = scribe.startScroll()
+            val scroll = scribe.unrollScroll()
 
             scroll.seal()
             shelf.awaitEvents(1)
@@ -426,7 +444,7 @@ class ScribeRuntimeTest {
         runSuspend {
             val shelf = RecordingShelf()
             val scribe = scribeWithScrollShelves(shelf, margins = null)
-            val scroll = scribe.startScroll()
+            val scroll = scribe.unrollScroll()
 
             scroll.seal()
             shelf.awaitEvents(1)
@@ -455,7 +473,7 @@ class ScribeRuntimeTest {
                 }
             }
             val scribe = scribeWithScrollShelves(shelf, margins = elapsedMargin)
-            val scroll = scribe.startScroll()
+            val scroll = scribe.unrollScroll()
 
             scroll.seal()
             shelf.awaitEvents(1)
@@ -477,7 +495,7 @@ class ScribeRuntimeTest {
                 override fun footer(scroll: Scroll) { calls.add("footer") }
             }
             val scribe = scribeWithScrollShelves(shelf, margins = margin)
-            val scroll = scribe.startScroll()
+            val scroll = scribe.unrollScroll()
 
             scroll.seal()
             scribe.close()
@@ -491,7 +509,7 @@ class ScribeRuntimeTest {
         runSuspend {
             val shelf = RecordingShelf()
             val scribe = scribeWithScrollShelves(shelf)
-            val scroll = scribe.startScroll()
+            val scroll = scribe.unrollScroll()
 
             scroll.putString("key", "value")
             assertEquals(JsonPrimitive("value"), scroll.get("key"))
@@ -507,7 +525,7 @@ class ScribeRuntimeTest {
         runSuspend {
             val shelf = RecordingShelf()
             val scribe = scribeWithScrollShelves(shelf)
-            val scroll = scribe.startScroll()
+            val scroll = scribe.unrollScroll()
 
             scroll.putString("key", "value")
             scroll.seal()
@@ -617,12 +635,12 @@ private val UUID_REGEX =
 private fun scribeWithScrollShelves(
     vararg shelves: ScrollSaver,
     contextData: Map<String, JsonElement> = emptyMap(),
-    processConfig: ScribeProcessConfig = ScribeProcessConfig(),
+    deliveryConfig: ScribeDeliveryConfig = ScribeDeliveryConfig(),
     margins: Margin? = null,
 ): Scribe = Scribe(
-    shelf = shelves.toList(),
-    _contextData = contextData,
-    processConfig = processConfig,
+    shelves = shelves.toList(),
+    contextData = contextData,
+    deliveryConfig = deliveryConfig,
     margins = margins,
 )
 

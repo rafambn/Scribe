@@ -1,20 +1,20 @@
 package com.rafambn.scribe
 
 import kotlinx.serialization.ExperimentalSerializationApi
-import kotlinx.serialization.KSerializer
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonElement
-import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.serializerOrNull
 import kotlin.reflect.typeOf
 
-class Scroll(
+class Scroll internal constructor(
     val id: String,
-    val context: Scribe,
     contextData: Map<String, JsonElement> = emptyMap(),
+    private val onSeal: (Scroll) -> Unit = {},
+    private val emitSealedScroll: suspend (SealedScroll) -> Unit = {},
+    private val tryEmitSealedScroll: (SealedScroll) -> Unit = {},
 ) {
-    private val _contextData = contextData.toMap()
+    private val sharedContext = contextData.toMap()
     private val _data = mutableMapOf<String, JsonElement>()
     private var sealed: Boolean = false
 
@@ -23,49 +23,25 @@ class Scroll(
 
     suspend fun seal(success: Boolean = true, error: Throwable? = null): SealedScroll {
         if (sealed) {
-            return SealedScroll(
-                scrollId = id,
-                success = success,
-                errorMessage = error?.message,
-                context = _contextData,
-                data = _data.toMap(),
-            )
+            return toSealedScroll(success, error)
         }
-        context.margins?.footer(this)
+        onSeal(this)
         sealed = true
 
-        val result = SealedScroll(
-            scrollId = id,
-            success = success,
-            errorMessage = error?.message,
-            context = _contextData,
-            data = _data.toMap(),
-        )
-        context.queue.send(result)
+        val result = toSealedScroll(success, error)
+        emitSealedScroll(result)
         return result
     }
 
-    fun sealBlocking(success: Boolean = true, error: Throwable? = null): SealedScroll {
+    fun trySeal(success: Boolean = true, error: Throwable? = null): SealedScroll {
         if (sealed) {
-            return SealedScroll(
-                scrollId = id,
-                success = success,
-                errorMessage = error?.message,
-                context = _contextData,
-                data = _data.toMap(),
-            )
+            return toSealedScroll(success, error)
         }
-        context.margins?.footer(this)
+        onSeal(this)
         sealed = true
 
-        val result = SealedScroll(
-            scrollId = id,
-            success = success,
-            errorMessage = error?.message,
-            context = _contextData,
-            data = _data.toMap(),
-        )
-        context.queue.trySend(result)
+        val result = toSealedScroll(success, error)
+        tryEmitSealedScroll(result)
         return result
     }
 
@@ -89,7 +65,7 @@ class Scroll(
         putResolved(key, Json.encodeToJsonElement(serializer, value))
     }
 
-    fun get(key: String): JsonElement? = _data[key] ?: _contextData[key]
+    fun get(key: String): JsonElement? = _data[key] ?: sharedContext[key]
 
     fun remove(key: String): JsonElement? {
         if (sealed) return null
@@ -101,6 +77,15 @@ class Scroll(
         if (sealed) return
         _data[key] = value
     }
+
+    private fun toSealedScroll(success: Boolean, error: Throwable?): SealedScroll =
+        SealedScroll(
+            scrollId = id,
+            success = success,
+            errorMessage = error?.message,
+            context = sharedContext,
+            data = _data.toMap(),
+        )
 
     private fun ensureFinite(key: String, value: Number) {
         when (value) {
