@@ -94,7 +94,7 @@ class ScribeRuntimeTest {
 
             assertNotNull(successEvent)
             assertNotNull(failureEvent)
-            assertEquals(2, scribe.getScrolls().size)
+            assertEquals(2, scribe.seekScrolls().size)
 
             assertTrue(successEvent.success)
             assertEquals(JsonPrimitive(scroll1.id), successEvent.data["scrollId"])
@@ -292,7 +292,7 @@ class ScribeRuntimeTest {
             val originalScroll = scribe.unrollScroll(id = "shared")
 
             originalScroll.writeString("stage", "created")
-            val sameScroll = scribe.getScrolls().single()
+            val sameScroll = scribe.seekScrolls().single()
 
             originalScroll.writeString("status", "updated")
 
