@@ -291,67 +291,6 @@ class ScribeRuntimeTest {
     }
 
     @Test
-    fun captureScroll_seals_successfully_and_returns_sealed_scroll() {
-        runSuspend {
-            val shelf = RecordingShelf()
-            val scribe = scribeWithScrollShelves(shelf)
-
-            val sealed = scribe.captureScroll {
-                putString("operation", "checkout")
-            }
-
-            scribe.close()
-
-            assertTrue(sealed.success)
-            assertEquals(null, sealed.errorMessage)
-            assertEquals(JsonPrimitive("checkout"), sealed.data["operation"])
-            assertEquals(1, shelf.events.size)
-            assertEquals(1, scribe.getScrolls().size)
-            assertTrue(scribe.getScrolls().single().isSealed)
-        }
-    }
-
-    @Test
-    fun captureScroll_seals_failure_and_rethrows() {
-        runSuspend {
-            val shelf = RecordingShelf()
-            val scribe = scribeWithScrollShelves(shelf)
-
-            val thrown = assertFailsWith<IllegalStateException> {
-                scribe.captureScroll {
-                    putString("operation", "checkout")
-                    throw IllegalStateException("gateway failed")
-                }
-            }
-            scribe.close()
-
-            assertEquals("gateway failed", thrown.message)
-            assertEquals(1, shelf.events.size)
-
-            val event = shelf.events.single()
-            assertFalse(event.success)
-            assertEquals("gateway failed", event.errorMessage)
-            assertEquals(JsonPrimitive("checkout"), event.data["operation"])
-        }
-    }
-
-    @Test
-    fun captureScroll_accepts_custom_id() {
-        runSuspend {
-            val shelf = RecordingShelf()
-            val scribe = scribeWithScrollShelves(shelf)
-
-            scribe.captureScroll(id = "flow-mobile-1") {
-                putString("operation", "checkout")
-            }
-            scribe.close()
-
-            val event = shelf.events.single()
-            assertEquals("flow-mobile-1", event.scrollId)
-        }
-    }
-
-    @Test
     fun events_are_dispatched_to_multiple_sinks() {
         runSuspend {
             val shelf1 = RecordingShelf()

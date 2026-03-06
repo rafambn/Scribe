@@ -7,8 +7,6 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.json.JsonElement
 
 class Scribe(
@@ -19,7 +17,6 @@ class Scribe(
     onUncaughtException: ((Throwable) -> Unit)? = null,
 ) : AutoCloseable {
     private val scrollsById = mutableMapOf<String, Scroll>()
-    private val scrollsMutex = Mutex()
     internal val queue = Channel<Record>(
         capacity = processConfig.bufferSize,
         onBufferOverflow = processConfig.overflowStrategy,
@@ -54,9 +51,9 @@ class Scribe(
         }
     }
 
-    suspend fun getScrolls(): List<Scroll> = scrollsMutex.withLock { scrollsById.values.toList() }
+    fun getScrolls(): List<Scroll> = scrollsById.values.toList()
 
-    suspend fun startScroll(id: String? = null): Scroll = scrollsMutex.withLock {
+    fun startScroll(id: String? = null): Scroll {
         val resolvedId = when {
             id == null -> {
                 var generatedId = newScrollId()
@@ -80,20 +77,7 @@ class Scribe(
         )
         margins?.header(scroll)
         scrollsById[resolvedId] = scroll
-        scroll
-    }
-
-    suspend fun captureScroll(id: String? = null, block: suspend Scroll.() -> Unit = {}): SealedScroll {
-        val scroll = startScroll(id = id)
-        val throwable = try {
-            scroll.block()
-            null
-        } catch (t: Throwable) {
-            t
-        }
-        val sealed = scroll.seal(success = throwable == null, error = throwable)
-        if (throwable != null) throw throwable
-        return sealed
+        return scroll
     }
 
     override fun close() {
