@@ -11,10 +11,10 @@
 ## Terminology
 
 - `note(...)`: suspend function for delivering a single log entry
-- `tryNote(...)`: best-effort non-suspending variant
+- `flingNote(...)`: best-effort non-suspending variant
 - `unrollScroll(...)`: starts a contextual log
 - `seal(...)`: finalizes a scroll and emits a `SealedScroll`
-- `trySeal(...)`: best-effort non-suspending variant
+- `looseSeal(...)`: best-effort non-suspending variant
 - `Margin`: hook that can add fields when a scroll starts or seals
 - `ScribeDeliveryConfig`: queue and overflow behavior for async delivery
 
@@ -36,7 +36,7 @@ val scribe = Scribe(
 scribe.note(
     tag = "payments",
     message = "starting checkout",
-    level = LogLevel.INFO,
+    level = Urgency.INFO,
 )
 ```
 
@@ -49,7 +49,7 @@ val scribe = Scribe(
             println(scroll)
         }
     ),
-    contextData = mapOf(
+    imprint = mapOf(
         "service" to JsonPrimitive("billing"),
         "environment" to JsonPrimitive("production"),
     )
@@ -77,12 +77,12 @@ Use the saver that matches the output you want:
 ```kotlin
 val noteSaver = NoteSaver { note -> println(note) }
 val scrollSaver = ScrollSaver { scroll -> println(scroll) }
-val recordSaver = RecordSaver { record -> println(record) }
+val recordSaver = EntrySaver { record -> println(record) }
 ```
 
 - `NoteSaver` receives only `Note`
 - `ScrollSaver` receives only `SealedScroll`
-- `RecordSaver` receives both
+- `EntrySaver` receives both
 
 ## Margins
 
@@ -117,16 +117,16 @@ val scribe = Scribe(
 )
 ```
 
-Use `tryNote()` and `trySeal()` when you want a non-suspending best-effort call.
+Use `flingNote()` and `looseSeal()` when you want a non-suspending best-effort call.
 
 ## Uncaught Exceptions
 
-`Scribe` can install a platform uncaught exception hook through `onUncaughtException`.
+`Scribe` can install a platform uncaught exception hook through `onIgnition`.
 
 ```kotlin
 val scribe = Scribe(
     shelves = listOf(recordSaver),
-    onUncaughtException = { throwable ->
+    onIgnition = { throwable ->
         println("Uncaught exception: ${throwable.message}")
     }
 )

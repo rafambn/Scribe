@@ -5,7 +5,7 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonElement
 
 @Serializable
-sealed interface Record
+sealed interface Entry
 
 @Serializable
 data class SealedScroll(
@@ -14,18 +14,18 @@ data class SealedScroll(
     val errorMessage: String?,
     val context: Map<String, JsonElement>,
     val data: Map<String, JsonElement>,
-): Record
+): Entry
 
 @Serializable
 data class Note(
     val tag: String,
     val message: String,
-    val level: LogLevel,
+    val level: Urgency,
     val timestamp: Long,
-): Record
+): Entry
 
 @Serializable
-enum class LogLevel {
+enum class Urgency {
     VERBOSE,
     DEBUG,
     INFO,
@@ -36,5 +36,5 @@ enum class LogLevel {
 data class ScribeDeliveryConfig(
     val bufferSize: Int = 256,
     val overflowStrategy: BufferOverflow = BufferOverflow.DROP_OLDEST,
-    val onSaverError: (saver: Saver<*>, record: Record, error: Throwable) -> Unit = { _, _, _ -> },
+    val onSaverError: (saver: Saver<*>, entry: Entry, error: Throwable) -> Unit = { _, _, _ -> },
 )

@@ -108,7 +108,7 @@ class ScribeRuntimeTest {
     }
 
     @Test
-    fun putSerializable_stores_serializable_object_value() {
+    fun writeSerializable_stores_serializable_object_value() {
         runSuspend {
             val shelf = RecordingShelf()
             val scribe = scribeWithScrollShelves(shelf)
@@ -222,11 +222,11 @@ class ScribeRuntimeTest {
     fun unrollScroll_includes_context_data_in_event() {
         runSuspend {
             val shelf = RecordingShelf()
-            val contextData = mapOf(
+            val imprint = mapOf(
                 "service" to JsonPrimitive("mobile-app"),
                 "environment" to JsonPrimitive("production"),
             )
-            val scribe = scribeWithScrollShelves(shelf, contextData = contextData)
+            val scribe = scribeWithScrollShelves(shelf, imprint = imprint)
 
             val scroll = scribe.unrollScroll()
 
@@ -244,8 +244,8 @@ class ScribeRuntimeTest {
     fun all_scrolls_share_same_context() {
         runSuspend {
             val shelf = RecordingShelf()
-            val contextData = mapOf("region" to JsonPrimitive("us-east"))
-            val scribe = scribeWithScrollShelves(shelf, contextData = contextData)
+            val imprint = mapOf("region" to JsonPrimitive("us-east"))
+            val scribe = scribeWithScrollShelves(shelf, imprint = imprint)
 
             val firstScroll = scribe.unrollScroll(id = "first")
             val secondScroll = scribe.unrollScroll(id = "second")
@@ -269,8 +269,8 @@ class ScribeRuntimeTest {
     fun scroll_write_goes_to_data_field_separate_from_context() {
         runSuspend {
             val shelf = RecordingShelf()
-            val contextData = mapOf("region" to JsonPrimitive("us-east"))
-            val scribe = scribeWithScrollShelves(shelf, contextData = contextData)
+            val imprint = mapOf("region" to JsonPrimitive("us-east"))
+            val scribe = scribeWithScrollShelves(shelf, imprint = imprint)
             val scroll = scribe.unrollScroll()
 
             scroll.writeString("region", "ap-south")
@@ -291,14 +291,14 @@ class ScribeRuntimeTest {
             val scribe = scribeWithScrollShelves(shelf)
             val originalScroll = scribe.unrollScroll(id = "shared")
 
-            originalScroll.putString("stage", "created")
+            originalScroll.writeString("stage", "created")
             val sameScroll = scribe.getScrolls().single()
 
-            originalScroll.putString("status", "updated")
+            originalScroll.writeString("status", "updated")
 
             assertSame(originalScroll, sameScroll)
-            assertEquals(JsonPrimitive("created"), sameScroll.get("stage"))
-            assertEquals(JsonPrimitive("updated"), sameScroll.get("status"))
+            assertEquals(JsonPrimitive("created"), sameScroll.read("stage"))
+            assertEquals(JsonPrimitive("updated"), sameScroll.read("status"))
             scribe.close()
         }
     }
@@ -327,7 +327,7 @@ class ScribeRuntimeTest {
         runSuspend {
             val scrollShelf = RecordingShelf()
             val noteSaver = RecordingNoteSaver()
-            val allSaver = RecordingRecordSaver()
+            val allSaver = RecordingEntrySaver()
             val scribe = Scribe(
                 shelves = listOf(
                     scrollShelf,
@@ -336,7 +336,7 @@ class ScribeRuntimeTest {
                 ),
             )
 
-            scribe.tryNote(tag = "payments", message = "started", level = LogLevel.INFO, timestamp = 100L)
+            scribe.flingNote(tag = "payments", message = "started", level = Urgency.INFO, timestamp = 100L)
             scribe.unrollScroll(id = "scroll-1").seal()
             scrollShelf.awaitEvents(1)
             noteSaver.awaitEvents(1)
@@ -612,11 +612,11 @@ class ScribeRuntimeTest {
         }
     }
 
-    private class RecordingRecordSaver : RecordSaver {
-        val events = mutableListOf<Record>()
+    private class RecordingEntrySaver : EntrySaver {
+        val events = mutableListOf<Entry>()
         private val writes = Channel<Unit>(Channel.UNLIMITED)
 
-        override suspend fun write(event: Record) {
+        override suspend fun write(event: Entry) {
             events += event
             writes.trySend(Unit)
         }
@@ -634,12 +634,12 @@ private val UUID_REGEX =
 
 private fun scribeWithScrollShelves(
     vararg shelves: ScrollSaver,
-    contextData: Map<String, JsonElement> = emptyMap(),
+    imprint: Map<String, JsonElement> = emptyMap(),
     deliveryConfig: ScribeDeliveryConfig = ScribeDeliveryConfig(),
     margins: Margin? = null,
 ): Scribe = Scribe(
     shelves = shelves.toList(),
-    contextData = contextData,
+    imprint = imprint,
     deliveryConfig = deliveryConfig,
     margins = margins,
 )

@@ -1,6 +1,6 @@
 package com.rafambn.scribe
 
-fun interface Saver<T : Record> {
+fun interface Saver<T : Entry> {
     suspend fun write(event: T)
 }
 
@@ -8,4 +8,4 @@ fun interface NoteSaver : Saver<Note>
 
 fun interface ScrollSaver : Saver<SealedScroll>
 
-fun interface RecordSaver : Saver<Record>
+fun interface EntrySaver : Saver<Entry>

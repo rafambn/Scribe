@@ -11,13 +11,13 @@ import kotlinx.serialization.json.JsonElement
 
 class Scribe(
     private val shelves: List<Saver<*>>,
-    private val contextData: Map<String, JsonElement> = emptyMap(),
+    private val imprint: Map<String, JsonElement> = emptyMap(),
     private val deliveryConfig: ScribeDeliveryConfig = ScribeDeliveryConfig(),
     private val margins: Margin? = null,
-    onUncaughtException: ((Throwable) -> Unit)? = null,
+    onIgnition: ((Throwable) -> Unit)? = null,
 ) : AutoCloseable {
     private val scrollsById = mutableMapOf<String, Scroll>()
-    internal val queue = Channel<Record>(
+    internal val queue = Channel<Entry>(
         capacity = deliveryConfig.bufferSize,
         onBufferOverflow = deliveryConfig.overflowStrategy,
     )
@@ -27,20 +27,20 @@ class Scribe(
     init {
         require(deliveryConfig.bufferSize >= -2) { "BufferSize must be >= -2. Check Channel documentation" }
         require(shelves.isNotEmpty()) { "At least one shelf is required." }
-        if (onUncaughtException != null) {
-            installUncaughtExceptionHandler(onUncaughtException)
+        if (onIgnition != null) {
+            installUncaughtExceptionHandler(onIgnition)
         }
         processorJob = processScope.launch {
-            for (record in queue) {
+            for (entry in queue) {
                 shelves.forEach { saver ->
                     try {
                         when (saver) {
-                            is RecordSaver -> saver.write(record)
-                            is ScrollSaver if record is SealedScroll -> saver.write(record)
-                            is NoteSaver if record is Note -> saver.write(record)
+                            is EntrySaver -> saver.write(entry)
+                            is ScrollSaver if entry is SealedScroll -> saver.write(entry)
+                            is NoteSaver if entry is Note -> saver.write(entry)
                         }
                     } catch (e: Throwable) {
-                        deliveryConfig.onSaverError(saver, record, e)
+                        deliveryConfig.onSaverError(saver, entry, e)
                     }
                 }
             }
@@ -71,7 +71,7 @@ class Scribe(
 
         val scroll = Scroll(
             id = resolvedId,
-            contextData = contextData.toMap(),
+            imprint = imprint.toMap(),
             onSeal = { margins?.footer(it) },
             emitSealedScroll = { queue.send(it) },
             tryEmitSealedScroll = { queue.trySend(it) },
@@ -85,7 +85,7 @@ class Scribe(
         queue.close()
     }
 
-    suspend fun note(tag: String, message: String, level: LogLevel = LogLevel.INFO, timestamp: Long = nowEpochMs()) {
+    suspend fun note(tag: String, message: String, level: Urgency = Urgency.INFO, timestamp: Long = nowEpochMs()) {
         queue.send(
             Note(
                 tag = tag,
@@ -96,7 +96,7 @@ class Scribe(
         )
     }
 
-    fun tryNote(tag: String, message: String, level: LogLevel = LogLevel.INFO, timestamp: Long = nowEpochMs()) {
+    fun flingNote(tag: String, message: String, level: Urgency = Urgency.INFO, timestamp: Long = nowEpochMs()) {
         queue.trySend(
             Note(
                 tag = tag,

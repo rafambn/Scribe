@@ -9,12 +9,12 @@ import kotlin.reflect.typeOf
 
 class Scroll internal constructor(
     val id: String,
-    contextData: Map<String, JsonElement> = emptyMap(),
+    imprint: Map<String, JsonElement> = emptyMap(),
     private val onSeal: (Scroll) -> Unit = {},
     private val emitSealedScroll: suspend (SealedScroll) -> Unit = {},
     private val tryEmitSealedScroll: (SealedScroll) -> Unit = {},
 ) {
-    private val sharedContext = contextData.toMap()
+    private val sharedContext = imprint.toMap()
     private val _data = mutableMapOf<String, JsonElement>()
     private var sealed: Boolean = false
 
@@ -33,7 +33,7 @@ class Scroll internal constructor(
         return result
     }
 
-    fun trySeal(success: Boolean = true, error: Throwable? = null): SealedScroll {
+    fun looseSeal(success: Boolean = true, error: Throwable? = null): SealedScroll {
         if (sealed) {
             return toSealedScroll(success, error)
         }
