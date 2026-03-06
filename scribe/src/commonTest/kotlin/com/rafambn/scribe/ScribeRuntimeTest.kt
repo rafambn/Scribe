@@ -29,8 +29,8 @@ class ScribeRuntimeTest {
         runSuspend {
             scroll.put("method", "card")
             scroll.seal(success = true)
-            scribe.close()
         }
+        scribe.close()
 
         assertEquals(1, shelf.events.size)
         val event = shelf.events.single()
@@ -51,8 +51,8 @@ class ScribeRuntimeTest {
         runSuspend {
             scroll.seal(success = false, error = IllegalStateException("fail"))
             scroll.seal(success = true)
-            scribe.close()
         }
+        scribe.close()
 
         assertTrue(scroll.isSealed)
         assertEquals(1, shelf.events.size)
@@ -80,8 +80,8 @@ class ScribeRuntimeTest {
             }
             scroll1.seal(success = true)
             scroll2.seal(success = true)
-            scribe.close()
         }
+        scribe.close()
 
         assertEquals(2, shelf.events.size)
 
@@ -111,8 +111,8 @@ class ScribeRuntimeTest {
         runSuspend {
             scroll.put("meta", GatewayMeta(retries = 2))
             scroll.seal()
-            scribe.close()
         }
+        scribe.close()
 
         val event = shelf.events.single()
         assertEquals(JsonObject(mapOf("retries" to JsonPrimitive(2))), event.data["meta"])
@@ -131,8 +131,8 @@ class ScribeRuntimeTest {
             scroll.putSerializable("meta", GatewayMeta(retries = 2))
             scroll.putObject("details", GatewayMeta(retries = 5))
             scroll.seal()
-            scribe.close()
         }
+        scribe.close()
 
         val event = shelf.events.single()
         assertEquals(JsonPrimitive("accepted"), event.data["message"])
@@ -194,8 +194,8 @@ class ScribeRuntimeTest {
         runSuspend {
             scroll.putString("operation", "sync")
             scroll.seal()
-            scribe.close()
         }
+        scribe.close()
 
         val event = shelf.events.single()
         assertEquals("session-42", scroll.id)
@@ -226,8 +226,8 @@ class ScribeRuntimeTest {
 
         runSuspend {
             scroll.seal()
-            scribe.close()
         }
+        scribe.close()
 
         val event = shelf.events.single()
         assertEquals(JsonPrimitive("mobile-app"), event.context["service"])
@@ -247,8 +247,8 @@ class ScribeRuntimeTest {
         runSuspend {
             firstScroll.seal()
             secondScroll.seal()
-            scribe.close()
         }
+        scribe.close()
 
         val firstEvent = shelf.events.firstOrNull { it.scrollId == "first" }
         val secondEvent = shelf.events.firstOrNull { it.scrollId == "second" }
@@ -269,8 +269,8 @@ class ScribeRuntimeTest {
         runSuspend {
             scroll.putString("region", "ap-south")
             scroll.seal()
-            scribe.close()
         }
+        scribe.close()
 
         val event = shelf.events.single()
         assertEquals(JsonPrimitive("us-east"), event.context["region"])
@@ -331,8 +331,8 @@ class ScribeRuntimeTest {
             scribe.captureScroll(id = "flow-mobile-1") {
                 putString("operation", "checkout")
             }
-            scribe.close()
         }
+        scribe.close()
 
         val event = shelf.events.single()
         assertEquals("flow-mobile-1", event.scrollId)
@@ -347,8 +347,8 @@ class ScribeRuntimeTest {
 
         runSuspend {
             scroll.seal()
-            scribe.close()
         }
+        scribe.close()
 
         assertEquals(1, shelf1.events.size)
         assertEquals(1, shelf2.events.size)
@@ -371,8 +371,8 @@ class ScribeRuntimeTest {
         runSuspend {
             scribe.note(tag = "payments", message = "started", level = LogLevel.INFO, timestamp = 100L)
             scribe.startScroll(id = "scroll-1").seal()
-            scribe.close()
         }
+        scribe.close()
 
         assertEquals(1, scrollShelf.events.size)
         assertEquals(1, noteSaver.events.size)
@@ -438,8 +438,8 @@ class ScribeRuntimeTest {
 
         runSuspend {
             scroll.seal()
-            scribe.close()
         }
+        scribe.close()
 
         val event = shelf.events.single()
         assertEquals(JsonPrimitive(1000L), event.data["startedAtEpochMs"])
@@ -454,8 +454,8 @@ class ScribeRuntimeTest {
 
         runSuspend {
             scroll.seal()
-            scribe.close()
         }
+        scribe.close()
 
         val event = shelf.events.single()
         assertFalse(event.data.containsKey("startedAtEpochMs"))
@@ -482,8 +482,8 @@ class ScribeRuntimeTest {
 
         runSuspend {
             scroll.seal()
-            scribe.close()
         }
+        scribe.close()
 
         val event = shelf.events.single()
         assertEquals(JsonPrimitive(500L), event.data["elapsedMs"])
@@ -503,8 +503,8 @@ class ScribeRuntimeTest {
 
         runSuspend {
             scroll.seal()
-            scribe.close()
         }
+        scribe.close()
 
         assertEquals(listOf("header", "footer"), calls)
     }
@@ -521,8 +521,8 @@ class ScribeRuntimeTest {
             val removed = scroll.remove("key")
             assertEquals(JsonPrimitive("value"), removed)
             assertNull(scroll.get("key"))
-            scribe.close()
         }
+        scribe.close()
     }
 
     @Test
@@ -535,8 +535,8 @@ class ScribeRuntimeTest {
             scroll.putString("key", "value")
             scroll.seal()
             assertNull(scroll.remove("key"))
-            scribe.close()
         }
+        scribe.close()
 
         val event = shelf.events.single()
         assertEquals(JsonPrimitive("value"), event.data["key"])

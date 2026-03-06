@@ -2,11 +2,14 @@ package com.rafambn.scribe
 
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.selects.select
 import kotlinx.serialization.json.JsonElement
 
@@ -15,7 +18,7 @@ class Scribe(
     val contextData: MutableMap<String, JsonElement> = mutableMapOf(),
     val processConfig: ScribeProcessConfig = ScribeProcessConfig(),
     val margins: Margin? = null,
-    val onUncaughtException: ((Throwable) -> Unit)? = null,
+    onUncaughtException: ((Throwable) -> Unit)? = null,
 ) {
     private val scrollsById = mutableMapOf<String, Scroll>()
     internal val queue = Channel<Record>(
@@ -129,9 +132,12 @@ class Scribe(
         )
     }
 
-    suspend fun close() {
-        queue.close()
-        processorJob.join()
+    @OptIn(ExperimentalCoroutinesApi::class)
+    fun close() {
+        runBlocking {
+            while (!queue.isEmpty) delay(1)
+            delay(10)
+        }
         processScope.cancel()
     }
 
