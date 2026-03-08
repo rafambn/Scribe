@@ -1,27 +1,25 @@
 package com.rafambn.scribe
 
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.cancel
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.JsonElement
 
 class Scribe(
+    private val scope: CoroutineScope,
     private val shelves: List<Saver<*>>,
     private val imprint: Map<String, JsonElement> = emptyMap(),
     private val deliveryConfig: ScribeDeliveryConfig = ScribeDeliveryConfig(),
     private val margins: Margin? = null,
+    private val retireStrategy: ScribeRetireStrategies = ScribeRetireStrategies.CLOSE_AND_DRAIN,
     onIgnition: ((Throwable) -> Unit)? = null,
-) : AutoCloseable {
+) {
     private val scrollsById = mutableMapOf<String, Scroll>()
     internal val queue = Channel<Entry>(
         capacity = deliveryConfig.bufferSize,
         onBufferOverflow = deliveryConfig.overflowStrategy,
     )
-    private val processScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private val processorJob: Job
 
     init {
@@ -30,7 +28,7 @@ class Scribe(
         if (onIgnition != null) {
             installUncaughtExceptionHandler(onIgnition)
         }
-        processorJob = processScope.launch {
+        processorJob = scope.launch {
             for (entry in queue) {
                 shelves.forEach { saver ->
                     try {
@@ -44,9 +42,6 @@ class Scribe(
                     }
                 }
             }
-        }
-        processorJob.invokeOnCompletion {
-            processScope.cancel()
         }
     }
 
@@ -81,8 +76,20 @@ class Scribe(
         return scroll
     }
 
-    override fun close() {
-        queue.close()
+    suspend fun retire() {
+        when (retireStrategy) {
+            ScribeRetireStrategies.CLOSE_ONLY -> {
+                queue.close()
+            }
+            ScribeRetireStrategies.CLOSE_AND_DRAIN -> {
+                queue.close()
+                processorJob.join()
+            }
+            ScribeRetireStrategies.CANCEL_IMMEDIATELY -> {
+                queue.cancel()
+                processorJob.cancel()
+            }
+        }
     }
 
     suspend fun note(tag: String, message: String, level: Urgency = Urgency.INFO, timestamp: Long = nowEpochMs()) {

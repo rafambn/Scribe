@@ -26,6 +26,7 @@ The library is not published yet. Add the `scribe` module directly or publish it
 
 ```kotlin
 val scribe = Scribe(
+    scope = CoroutineScope(SupervisorJob() + Dispatchers.Default),
     shelves = listOf(
         NoteSaver { note ->
             println("[${note.level}] ${note.tag}: ${note.message}")
@@ -44,6 +45,7 @@ scribe.note(
 
 ```kotlin
 val scribe = Scribe(
+    scope = CoroutineScope(SupervisorJob() + Dispatchers.Default),
     shelves = listOf(
         ScrollSaver { scroll ->
             println(scroll)
@@ -105,7 +107,10 @@ val timingMargin = object : Margin {
 `Scribe` delivers records through an internal channel processed on a coroutine scope.
 
 ```kotlin
+val appScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+
 val scribe = Scribe(
+    scope = appScope,
     shelves = listOf(recordSaver),
     deliveryConfig = ScribeDeliveryConfig(
         bufferSize = 256,
@@ -119,12 +124,35 @@ val scribe = Scribe(
 
 Use `flingNote()` and `looseSeal()` when you want a non-suspending best-effort call.
 
+## Lifecycle
+
+`Scribe` requires an explicit scope. Create one app-level scope and pass it to a single long-lived `Scribe`.
+
+```kotlin
+object AppLog {
+    private val appScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+
+    val scribe = Scribe(
+        scope = appScope,
+        shelves = listOf(recordSaver),
+    )
+}
+```
+
+- `retire()`: uses the configured `ScribeRetireStrategies` mode
+
+You can choose how retirement closes the channel:
+- `ScribeRetireStrategies.CLOSE_AND_DRAIN` (default)
+- `ScribeRetireStrategies.CLOSE_ONLY`
+- `ScribeRetireStrategies.CANCEL_IMMEDIATELY`
+
 ## Uncaught Exceptions
 
 `Scribe` can install a platform uncaught exception hook through `onIgnition`.
 
 ```kotlin
 val scribe = Scribe(
+    scope = CoroutineScope(SupervisorJob() + Dispatchers.Default),
     shelves = listOf(recordSaver),
     onIgnition = { throwable ->
         println("Uncaught exception: ${throwable.message}")

@@ -38,3 +38,9 @@ data class ScribeDeliveryConfig(
     val overflowStrategy: BufferOverflow = BufferOverflow.DROP_OLDEST,
     val onSaverError: (saver: Saver<*>, entry: Entry, error: Throwable) -> Unit = { _, _, _ -> },
 )
+
+enum class ScribeRetireStrategies {
+    CLOSE_ONLY,
+    CLOSE_AND_DRAIN,
+    CANCEL_IMMEDIATELY,
+}
