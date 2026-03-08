@@ -1,14 +1,16 @@
 package com.rafambn.scribe
 
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.JsonElement
 
 class Scribe(
-    private val scope: CoroutineScope,
+    private val scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Default),
     private val shelves: List<Saver<*>>,
     private val imprint: Map<String, JsonElement> = emptyMap(),
     private val deliveryConfig: ScribeDeliveryConfig = ScribeDeliveryConfig(),
@@ -84,7 +86,8 @@ class Scribe(
 
     suspend fun planRetire() {
         queue.close()
-        if (currentCoroutineContext()[Job] !== processorJob) {
+        val callerJob = currentCoroutineContext()[Job]
+        if (!isProcessorFamily(callerJob)) {
             processorJob.join()
         }
     }
@@ -111,5 +114,24 @@ class Scribe(
                 timestamp = timestamp,
             ),
         )
+    }
+
+    private fun isProcessorFamily(job: Job?): Boolean {
+        if (job == null) return false
+        if (job === processorJob) return true
+        return containsDescendant(processorJob, job)
+    }
+
+    private fun containsDescendant(root: Job, target: Job): Boolean {
+        val queue = ArrayDeque<Job>()
+        queue.add(root)
+        while (queue.isNotEmpty()) {
+            val current = queue.removeFirst()
+            current.children.forEach { child ->
+                if (child === target) return true
+                queue.addLast(child)
+            }
+        }
+        return false
     }
 }

@@ -6,10 +6,10 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
-import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.withTimeout
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonElement
@@ -335,7 +335,6 @@ class ScribeRuntimeTest {
             val noteSaver = RecordingNoteSaver()
             val allSaver = RecordingEntrySaver()
             val scribe = Scribe(
-                scope = CoroutineScope(SupervisorJob() + Dispatchers.Default),
                 shelves = listOf(
                     scrollShelf,
                     noteSaver,
@@ -476,11 +475,34 @@ class ScribeRuntimeTest {
                 retired.complete(Unit)
             }
             scribe = Scribe(
-                scope = CoroutineScope(SupervisorJob() + Dispatchers.Default),
                 shelves = listOf(saver),
             )
 
             scribe.flingNote(tag = "payments", message = "started", level = Urgency.INFO, timestamp = 1L)
+            withTimeout(2_000) {
+                retired.await()
+            }
+        }
+    }
+
+    @Test
+    fun planRetire_called_from_saver_child_coroutine_does_not_deadlock() {
+        runSuspend {
+            val retired = CompletableDeferred<Unit>()
+            lateinit var scribe: Scribe
+            val saver = EntrySaver {
+                coroutineScope {
+                    launch {
+                        scribe.planRetire()
+                        retired.complete(Unit)
+                    }
+                }
+            }
+            scribe = Scribe(
+                shelves = listOf(saver),
+            )
+
+            scribe.flingNote(tag = "payments", message = "started", level = Urgency.INFO, timestamp = 2L)
             withTimeout(2_000) {
                 retired.await()
             }
@@ -521,7 +543,6 @@ class ScribeRuntimeTest {
             val failingSaver = EntrySaver { throw IllegalStateException("boom") }
             val recordingSaver = RecordingEntrySaver()
             val scribe = Scribe(
-                scope = CoroutineScope(SupervisorJob() + Dispatchers.Default),
                 shelves = listOf(failingSaver, recordingSaver),
                 deliveryConfig = ScribeDeliveryConfig(
                     onSaverError = { _, entry, error ->
@@ -767,7 +788,6 @@ private fun scribeWithScrollShelves(
     deliveryConfig: ScribeDeliveryConfig = ScribeDeliveryConfig(),
     margins: Margin? = null,
 ): Scribe = Scribe(
-    scope = CoroutineScope(SupervisorJob() + Dispatchers.Default),
     shelves = shelves.toList(),
     imprint = imprint,
     deliveryConfig = deliveryConfig,

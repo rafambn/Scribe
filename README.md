@@ -26,7 +26,6 @@ The library is not published yet. Add the `scribe` module directly or publish it
 
 ```kotlin
 val scribe = Scribe(
-    scope = CoroutineScope(SupervisorJob() + Dispatchers.Default),
     shelves = listOf(
         NoteSaver { note ->
             println("[${note.level}] ${note.tag}: ${note.message}")
@@ -45,7 +44,6 @@ scribe.note(
 
 ```kotlin
 val scribe = Scribe(
-    scope = CoroutineScope(SupervisorJob() + Dispatchers.Default),
     shelves = listOf(
         ScrollSaver { scroll ->
             println(scroll)
@@ -107,10 +105,7 @@ val timingMargin = object : Margin {
 `Scribe` delivers records through an internal channel processed on a coroutine scope.
 
 ```kotlin
-val appScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
-
 val scribe = Scribe(
-    scope = appScope,
     shelves = listOf(recordSaver),
     deliveryConfig = ScribeDeliveryConfig(
         bufferSize = 256,
@@ -126,9 +121,13 @@ Use `flingNote()` and `looseSeal()` when you want a non-suspending best-effort c
 
 ## Lifecycle
 
-`Scribe` requires an explicit scope. Create one app-level scope and pass it to a single long-lived `Scribe`.
+`Scribe` defaults to its own internal `CoroutineScope(SupervisorJob() + Dispatchers.Default)`. For lifecycle-bound environments (Android, server frameworks) pass your own scope so cancellation propagates correctly.
 
 ```kotlin
+// Simple — uses the built-in scope
+val scribe = Scribe(shelves = listOf(recordSaver))
+
+// Lifecycle-bound — you control when the processor stops
 object AppLog {
     private val appScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
@@ -152,7 +151,6 @@ To stop the processor immediately, cancel the scope you passed to `Scribe`. The 
 
 ```kotlin
 val scribe = Scribe(
-    scope = CoroutineScope(SupervisorJob() + Dispatchers.Default),
     shelves = listOf(recordSaver),
     onIgnition = { throwable ->
         println("Uncaught exception: ${throwable.message}")
