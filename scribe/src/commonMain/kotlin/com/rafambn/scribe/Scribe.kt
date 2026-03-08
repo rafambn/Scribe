@@ -3,6 +3,7 @@ package com.rafambn.scribe
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.JsonElement
 
@@ -12,7 +13,6 @@ class Scribe(
     private val imprint: Map<String, JsonElement> = emptyMap(),
     private val deliveryConfig: ScribeDeliveryConfig = ScribeDeliveryConfig(),
     private val margins: Margin? = null,
-    private val retireStrategy: ScribeRetireStrategies = ScribeRetireStrategies.CLOSE_AND_DRAIN,
     onIgnition: ((Throwable) -> Unit)? = null,
 ) {
     private val scrollsById = mutableMapOf<String, Scroll>()
@@ -43,6 +43,8 @@ class Scribe(
                 }
             }
         }
+        // TODO: log the cancellation cause once internal logging is added to the library.
+        processorJob.invokeOnCompletion { queue.close() }
     }
 
     fun seekScrolls(): List<Scroll> = scrollsById.values.toList()
@@ -76,19 +78,14 @@ class Scribe(
         return scroll
     }
 
-    suspend fun retire() {
-        when (retireStrategy) {
-            ScribeRetireStrategies.CLOSE_ONLY -> {
-                queue.close()
-            }
-            ScribeRetireStrategies.CLOSE_AND_DRAIN -> {
-                queue.close()
-                processorJob.join()
-            }
-            ScribeRetireStrategies.CANCEL_IMMEDIATELY -> {
-                queue.cancel()
-                processorJob.cancel()
-            }
+    fun retire() {
+        queue.close()
+    }
+
+    suspend fun planRetire() {
+        queue.close()
+        if (currentCoroutineContext()[Job] !== processorJob) {
+            processorJob.join()
         }
     }
 
@@ -103,6 +100,8 @@ class Scribe(
         )
     }
 
+    // TODO: review silent-drop behavior after retire() — trySend result is intentionally ignored
+    //       (best-effort semantics), but callers have no signal that the entry was discarded.
     fun flingNote(tag: String, message: String, level: Urgency = Urgency.INFO, timestamp: Long = nowEpochMs()) {
         queue.trySend(
             Note(

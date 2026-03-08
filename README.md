@@ -139,12 +139,12 @@ object AppLog {
 }
 ```
 
-- `retire()`: uses the configured `ScribeRetireStrategies` mode
+Two shutdown options:
 
-You can choose how retirement closes the channel:
-- `ScribeRetireStrategies.CLOSE_AND_DRAIN` (default)
-- `ScribeRetireStrategies.CLOSE_ONLY`
-- `ScribeRetireStrategies.CANCEL_IMMEDIATELY`
+- `retire()` — non-suspending, closes the channel and returns immediately. The processor continues draining whatever is already buffered on a best-effort basis. Use this from non-coroutine contexts (e.g. `onDestroy`, shutdown hooks).
+- `planRetire()` — suspending, closes the channel and waits until every buffered entry has been processed. Use this when you need a clean shutdown guarantee.
+
+To stop the processor immediately, cancel the scope you passed to `Scribe`. The library will detect the cancellation and close the channel so subsequent sends fail visibly.
 
 ## Uncaught Exceptions
 

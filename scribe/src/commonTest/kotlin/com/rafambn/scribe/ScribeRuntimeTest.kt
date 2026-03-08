@@ -38,7 +38,7 @@ class ScribeRuntimeTest {
             scroll.writeSerializable("method", "card")
             scroll.seal(success = true)
             shelf.awaitEvents(1)
-            scribe.close()
+            scribe.retire()
 
             assertEquals(1, shelf.events.size)
             val event = shelf.events.single()
@@ -61,7 +61,7 @@ class ScribeRuntimeTest {
             scroll.seal(success = false, error = IllegalStateException("fail"))
             scroll.seal(success = true)
             shelf.awaitEvents(1)
-            scribe.close()
+            scribe.retire()
 
             assertTrue(scroll.isSealed)
             assertEquals(1, shelf.events.size)
@@ -91,7 +91,7 @@ class ScribeRuntimeTest {
             scroll1.seal(success = true)
             scroll2.seal(success = true)
             shelf.awaitEvents(2)
-            scribe.close()
+            scribe.retire()
 
             assertEquals(2, shelf.events.size)
 
@@ -123,7 +123,7 @@ class ScribeRuntimeTest {
             scroll.writeSerializable("meta", GatewayMeta(retries = 2))
             scroll.seal()
             shelf.awaitEvents(1)
-            scribe.close()
+            scribe.retire()
 
             val event = shelf.events.single()
             assertEquals(JsonObject(mapOf("retries" to JsonPrimitive(2))), event.data["meta"])
@@ -143,7 +143,7 @@ class ScribeRuntimeTest {
             scroll.writeSerializable("meta", GatewayMeta(retries = 2))
             scroll.seal()
             shelf.awaitEvents(1)
-            scribe.close()
+            scribe.retire()
 
             val event = shelf.events.single()
             assertEquals(JsonPrimitive("accepted"), event.data["message"])
@@ -201,7 +201,7 @@ class ScribeRuntimeTest {
             scroll.writeString("operation", "sync")
             scroll.seal()
             shelf.awaitEvents(1)
-            scribe.close()
+            scribe.retire()
 
             val event = shelf.events.single()
             assertEquals("session-42", scroll.id)
@@ -238,7 +238,7 @@ class ScribeRuntimeTest {
 
             scroll.seal()
             shelf.awaitEvents(1)
-            scribe.close()
+            scribe.retire()
 
             val event = shelf.events.single()
             assertEquals(JsonPrimitive("mobile-app"), event.context["service"])
@@ -259,7 +259,7 @@ class ScribeRuntimeTest {
             firstScroll.seal()
             secondScroll.seal()
             shelf.awaitEvents(2)
-            scribe.close()
+            scribe.retire()
 
             val firstEvent = shelf.events.firstOrNull { it.scrollId == "first" }
             val secondEvent = shelf.events.firstOrNull { it.scrollId == "second" }
@@ -282,7 +282,7 @@ class ScribeRuntimeTest {
             scroll.writeString("region", "ap-south")
             scroll.seal()
             shelf.awaitEvents(1)
-            scribe.close()
+            scribe.retire()
 
             val event = shelf.events.single()
             assertEquals(JsonPrimitive("us-east"), event.context["region"])
@@ -305,7 +305,7 @@ class ScribeRuntimeTest {
             assertSame(originalScroll, sameScroll)
             assertEquals(JsonPrimitive("created"), sameScroll.read("stage"))
             assertEquals(JsonPrimitive("updated"), sameScroll.read("status"))
-            scribe.close()
+            scribe.retire()
         }
     }
 
@@ -320,7 +320,7 @@ class ScribeRuntimeTest {
             scroll.seal()
             shelf1.awaitEvents(1)
             shelf2.awaitEvents(1)
-            scribe.close()
+            scribe.retire()
 
             assertEquals(1, shelf1.events.size)
             assertEquals(1, shelf2.events.size)
@@ -348,7 +348,7 @@ class ScribeRuntimeTest {
             scrollShelf.awaitEvents(1)
             noteSaver.awaitEvents(1)
             allSaver.awaitEvents(2)
-            scribe.close()
+            scribe.retire()
 
             assertEquals(1, scrollShelf.events.size)
             assertEquals(1, noteSaver.events.size)
@@ -374,7 +374,7 @@ class ScribeRuntimeTest {
 
             gate.complete(Unit)
             shelf.awaitEvents(1)
-            scribe.close()
+            scribe.retire()
             assertEquals(1, shelf.events.size)
         }
     }
@@ -389,7 +389,7 @@ class ScribeRuntimeTest {
             delay(500)
             scribe.unrollScroll(id = "second").seal()
             shelf.awaitEvents(2)
-            scribe.close()
+            scribe.retire()
 
             assertEquals(2, shelf.events.size)
             assertTrue(shelf.events.any { it.scrollId == "first" })
@@ -411,7 +411,7 @@ class ScribeRuntimeTest {
 
             gate.complete(Unit)
             shelf.awaitEvents(1)
-            scribe.close()
+            scribe.retire()
 
             assertEquals(1, shelf.events.size)
             assertEquals("scoped", shelf.events.single().scrollId)
@@ -419,7 +419,29 @@ class ScribeRuntimeTest {
     }
 
     @Test
-    fun retire_waits_for_pending_events_to_flush() {
+    fun retire_returns_immediately_without_waiting_for_drain() {
+        runSuspend {
+            val gate = CompletableDeferred<Unit>()
+            val firstWriteStarted = CompletableDeferred<Unit>()
+            val shelf = BlockingShelf(gate, firstWriteStarted)
+            val scribe = scribeWithScrollShelves(shelf)
+
+            scribe.unrollScroll(id = "in-flight").seal()
+            firstWriteStarted.await()
+
+            // retire() is non-suspending and returns immediately even while the processor is blocked
+            scribe.retire()
+            assertEquals(0, shelf.events.size)
+
+            // processor drains the remaining event once the gate opens
+            gate.complete(Unit)
+            shelf.awaitEvents(1)
+            assertEquals("in-flight", shelf.events.single().scrollId)
+        }
+    }
+
+    @Test
+    fun planRetire_waits_for_pending_events_to_flush() {
         runSuspend {
             val gate = CompletableDeferred<Unit>()
             val firstWriteStarted = CompletableDeferred<Unit>()
@@ -430,7 +452,7 @@ class ScribeRuntimeTest {
             firstWriteStarted.await()
 
             val retireScope = CoroutineScope(Dispatchers.Default)
-            val retireJob = retireScope.launch { scribe.retire() }
+            val retireJob = retireScope.launch { scribe.planRetire() }
             delay(50)
             assertFalse(retireJob.isCompleted)
 
@@ -445,19 +467,23 @@ class ScribeRuntimeTest {
     }
 
     @Test
-    fun retire_uses_close_only_strategy() {
+    fun planRetire_called_from_saver_does_not_deadlock() {
         runSuspend {
-            val shelf = RecordingShelf()
-            val scribe = scribeWithScrollShelves(
-                shelf,
-                retireStrategy = ScribeRetireStrategies.CLOSE_ONLY,
+            val retired = CompletableDeferred<Unit>()
+            lateinit var scribe: Scribe
+            val saver = EntrySaver {
+                scribe.planRetire()
+                retired.complete(Unit)
+            }
+            scribe = Scribe(
+                scope = CoroutineScope(SupervisorJob() + Dispatchers.Default),
+                shelves = listOf(saver),
             )
 
-            scribe.unrollScroll(id = "custom-shutdown").seal()
-            scribe.retire()
-
-            shelf.awaitEvents(1)
-            assertEquals("custom-shutdown", shelf.events.single().scrollId)
+            scribe.flingNote(tag = "payments", message = "started", level = Urgency.INFO, timestamp = 1L)
+            withTimeout(2_000) {
+                retired.await()
+            }
         }
     }
 
@@ -479,7 +505,7 @@ class ScribeRuntimeTest {
 
             gate.complete(Unit)
             shelf.awaitEvents(2)
-            scribe.close()
+            scribe.retire()
 
             assertTrue(shelf.events.any { it.scrollId == "one" })
             assertTrue(shelf.events.any { it.scrollId == "two" })
@@ -507,7 +533,7 @@ class ScribeRuntimeTest {
 
             scribe.flingNote(tag = "payments", message = "started", level = Urgency.INFO, timestamp = 42L)
             recordingSaver.awaitEvents(1)
-            scribe.close()
+            scribe.retire()
 
             assertEquals(1, recordingSaver.events.size)
             assertEquals(1, events.size)
@@ -534,7 +560,7 @@ class ScribeRuntimeTest {
 
             scroll.seal()
             shelf.awaitEvents(1)
-            scribe.close()
+            scribe.retire()
 
             val event = shelf.events.single()
             assertEquals(JsonPrimitive(1000L), event.data["startedAtEpochMs"])
@@ -551,7 +577,7 @@ class ScribeRuntimeTest {
 
             scroll.seal()
             shelf.awaitEvents(1)
-            scribe.close()
+            scribe.retire()
 
             val event = shelf.events.single()
             assertFalse(event.data.containsKey("startedAtEpochMs"))
@@ -580,7 +606,7 @@ class ScribeRuntimeTest {
 
             scroll.seal()
             shelf.awaitEvents(1)
-            scribe.close()
+            scribe.retire()
 
             val event = shelf.events.single()
             assertEquals(JsonPrimitive(500L), event.data["elapsedMs"])
@@ -601,7 +627,7 @@ class ScribeRuntimeTest {
             val scroll = scribe.unrollScroll()
 
             scroll.seal()
-            scribe.close()
+            scribe.retire()
 
             assertEquals(listOf("header", "footer"), calls)
         }
@@ -619,7 +645,7 @@ class ScribeRuntimeTest {
             val removed = scroll.erase("key")
             assertEquals(JsonPrimitive("value"), removed)
             assertNull(scroll.read("key"))
-            scribe.close()
+            scribe.retire()
         }
     }
 
@@ -634,7 +660,7 @@ class ScribeRuntimeTest {
             scroll.seal()
             assertNull(scroll.erase("key"))
             shelf.awaitEvents(1)
-            scribe.close()
+            scribe.retire()
 
             val event = shelf.events.single()
             assertEquals(JsonPrimitive("value"), event.data["key"])
@@ -740,21 +766,15 @@ private fun scribeWithScrollShelves(
     imprint: Map<String, JsonElement> = emptyMap(),
     deliveryConfig: ScribeDeliveryConfig = ScribeDeliveryConfig(),
     margins: Margin? = null,
-    retireStrategy: ScribeRetireStrategies = ScribeRetireStrategies.CLOSE_AND_DRAIN,
 ): Scribe = Scribe(
     scope = CoroutineScope(SupervisorJob() + Dispatchers.Default),
     shelves = shelves.toList(),
     imprint = imprint,
     deliveryConfig = deliveryConfig,
     margins = margins,
-    retireStrategy = retireStrategy,
 )
 
 private fun <T> runSuspend(block: suspend () -> T): T = runBlocking { block() }
-
-private suspend fun Scribe.close() {
-    retire()
-}
 
 private suspend fun createScribeInHelperAndEmit(shelf: ScrollSaver): Scribe {
     val scribe = scribeWithScrollShelves(shelf)
