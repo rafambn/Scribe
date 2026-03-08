@@ -10,11 +10,11 @@ import kotlinx.coroutines.launch
 import kotlinx.serialization.json.JsonElement
 
 class Scribe(
-    private val scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Default),
     private val shelves: List<Saver<*>>,
     private val imprint: Map<String, JsonElement> = emptyMap(),
     private val deliveryConfig: ScribeDeliveryConfig = ScribeDeliveryConfig(),
     private val margins: Margin? = null,
+    scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Default),
     onIgnition: ((Throwable) -> Unit)? = null,
 ) {
     private val scrollsById = mutableMapOf<String, Scroll>()
@@ -23,6 +23,22 @@ class Scribe(
         onBufferOverflow = deliveryConfig.overflowStrategy,
     )
     private val processorJob: Job
+
+    constructor(
+        shelf: Saver<*>,
+        imprint: Map<String, JsonElement> = emptyMap(),
+        deliveryConfig: ScribeDeliveryConfig = ScribeDeliveryConfig(),
+        margins: Margin? = null,
+        scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Default),
+        onIgnition: ((Throwable) -> Unit)? = null,
+    ) : this(
+        shelves = listOf(shelf),
+        imprint = imprint,
+        deliveryConfig = deliveryConfig,
+        margins = margins,
+        scope = scope,
+        onIgnition = onIgnition,
+    )
 
     init {
         require(deliveryConfig.bufferSize >= -2) { "BufferSize must be >= -2. Check Channel documentation" }
