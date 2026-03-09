@@ -8,13 +8,13 @@ plugins {
     alias(libs.plugins.vanniktech.mavenPublish)
 }
 
-group = "io.github.kotlin"
-version = "1.0.0"
+group = "com.rafambn"
+version = "0.1.0"
 
 kotlin {
     jvm()
     androidLibrary {
-        namespace = "org.jetbrains.kotlinx.multiplatform.library.template"
+        namespace = "com.rafambn.scribe"
         compileSdk = libs.versions.android.compileSdk.get().toInt()
         minSdk = libs.versions.android.minSdk.get().toInt()
 
@@ -50,35 +50,36 @@ kotlin {
 }
 
 mavenPublishing {
-    publishToMavenCentral()
-
-    signAllPublications()
-
-    coordinates(group.toString(), "library", version.toString())
+    coordinates(
+        groupId = group.toString(),
+        artifactId = "scribe",
+        version = version.toString()
+    )
 
     pom {
-        name = "My library"
-        description = "A library."
-        inceptionYear = "2024"
-        url = "https://github.com/kotlin/multiplatform-library-template/"
+        name.set("KMaP")
+        description.set("Kotlin Multiplatform logging library with notes, scrolls, and async saver delivery.")
+        url.set("https://scribe.rafambn.com")
         licenses {
             license {
-                name = "XXX"
-                url = "YYY"
-                distribution = "ZZZ"
+                name.set("Apache License, Version 2.0")
+                url.set("https://www.apache.org/licenses/LICENSE-2.0")
             }
         }
         developers {
             developer {
-                id = "XXX"
-                name = "YYY"
-                url = "ZZZ"
+                id.set("rafambn")
+                name.set("Rafael Mendonca")
+                email.set("rafambn@gmail.com")
+                url.set("https://rafambn.com")
             }
         }
         scm {
-            url = "XXX"
-            connection = "YYY"
-            developerConnection = "ZZZ"
+            url.set("https://github.com/rafambn/Scribe")
         }
     }
+
+    publishToMavenCentral()
+
+    signAllPublications()
 }

@@ -20,7 +20,13 @@
 
 ## Installation
 
-The library is not published yet. Add the `scribe` module directly or publish it from this repository.
+Use the `scribe` module directly from this repository, or publish it yourself from this project.
+
+Configured Maven coordinates in this repo:
+
+- Group: `io.github.rafambn`
+- Artifact: `scribe`
+- Version: `1.0.0`
 
 ## Create Notes
 
@@ -162,4 +168,4 @@ Use this when you want the logger to observe crashes that escape normal applicat
 
 ## Status
 
-This repository is still under active design. Backward compatibility is not guaranteed yet.
+This repository is under active development.
