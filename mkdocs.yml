@@ -11,9 +11,11 @@ theme:
   favicon: scribe-logo.svg
   language: en
   features:
-    - navigation.tabs
+    - navigation.instant
     - navigation.top
     - navigation.sections
+    - navigation.footer
+    - toc.follow
     - search.highlight
     - content.code.copy
   palette:
@@ -23,7 +25,9 @@ theme:
 
 nav:
   - Home: index.md
+  - Getting Started: getting-started.md
   - API Concepts: api-concepts.md
+  - Lifecycle and Delivery: lifecycle-and-delivery.md
 
 markdown_extensions:
   - admonition
