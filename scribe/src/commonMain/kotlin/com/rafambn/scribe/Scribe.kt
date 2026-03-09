@@ -116,6 +116,7 @@ class Scribe(
             id = resolvedId,
             imprint = imprint.toMap(),
             onSeal = { margins?.footer(it) },
+            onSealed = { scrollsById.remove(it.id) },
             emitSealedScroll = { queue.send(it) },
             tryEmitSealedScroll = { queue.trySend(it) },
         )

@@ -23,6 +23,7 @@ class ScribeScrollLifecycleTest {
             scroll.writeSerializable("method", "card")
             scroll.seal(success = true)
             shelf.awaitEvents(1)
+            assertTrue(scribe.seekScrolls().isEmpty())
             scribe.retire()
 
             val event = shelf.events.single()
@@ -45,6 +46,7 @@ class ScribeScrollLifecycleTest {
             scroll.seal(success = false, error = IllegalStateException("fail"))
             scroll.seal(success = true)
             shelf.awaitEvents(1)
+            assertTrue(scribe.seekScrolls().isEmpty())
             scribe.retire()
 
             assertTrue(scroll.isSealed)
@@ -79,7 +81,7 @@ class ScribeScrollLifecycleTest {
 
             assertNotNull(successEvent)
             assertNotNull(failureEvent)
-            assertEquals(2, scribe.seekScrolls().size)
+            assertTrue(scribe.seekScrolls().isEmpty())
             assertTrue(successEvent.success)
             assertFalse(failureEvent.success)
             assertEquals("order2 failed", failureEvent.errorMessage)
@@ -128,6 +130,21 @@ class ScribeScrollLifecycleTest {
             }
 
             assertEquals("A scroll with id 'session-42' already exists.", thrown.message)
+        }
+    }
+
+    @Test
+    fun custom_id_can_be_reused_after_scroll_is_sealed() {
+        runSuspend {
+            val shelf = RecordingShelf()
+            val scribe = scribeWithScrollShelves(shelf)
+
+            scribe.unrollScroll(id = "session-42").seal()
+            shelf.awaitEvents(1)
+
+            val reused = scribe.unrollScroll(id = "session-42")
+            assertEquals("session-42", reused.id)
+            scribe.retire()
         }
     }
 

@@ -14,6 +14,7 @@ class Scroll internal constructor(
     val id: String,
     imprint: Map<String, JsonElement> = emptyMap(),
     private val onSeal: (Scroll) -> Unit = {},
+    private val onSealed: (Scroll) -> Unit = {},
     private val emitSealedScroll: suspend (SealedScroll) -> Unit = {},
     private val tryEmitSealedScroll: (SealedScroll) -> Unit = {},
 ) {
@@ -36,6 +37,7 @@ class Scroll internal constructor(
         }
         onSeal(this)
         sealed = true
+        onSealed(this)
 
         val result = toSealedScroll(success, error)
         emitSealedScroll(result)
@@ -51,6 +53,7 @@ class Scroll internal constructor(
         }
         onSeal(this)
         sealed = true
+        onSealed(this)
 
         val result = toSealedScroll(success, error)
         tryEmitSealedScroll(result)
