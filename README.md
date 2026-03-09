@@ -17,7 +17,7 @@
 </p>
 
 <p align="center">
-  Scribe is a Kotlin Multiplatform logging library built around narrative concepts like <code>Note</code>, <code>Scroll</code>, and <code>SealedScroll</code>, based on the ideas from <a href="https://loggingsucks.com">loggingsucks.com</a>, so structured logs can model both single events and longer contextual flows.
+  Scribe is a Kotlin Multiplatform logging library built around the ideas from <a href="https://loggingsucks.com">loggingsucks.com</a>, so structured logs can model both single events and longer contextual flows.
 </p>
 
 <table align="center">

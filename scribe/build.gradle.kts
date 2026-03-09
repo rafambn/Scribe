@@ -1,4 +1,6 @@
-import com.android.build.api.dsl.androidLibrary
+import com.vanniktech.maven.publish.JavadocJar
+import com.vanniktech.maven.publish.KotlinMultiplatform
+import com.vanniktech.maven.publish.SourcesJar
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
 plugins {
@@ -12,24 +14,25 @@ group = "com.rafambn"
 version = "0.1.0"
 
 kotlin {
-    jvm()
-    androidLibrary {
+    jvm {
+        compilerOptions {
+            jvmTarget.set(JvmTarget.JVM_11)
+        }
+    }
+    jvmToolchain(11)
+
+    android {
         namespace = "com.rafambn.scribe"
         compileSdk = libs.versions.android.compileSdk.get().toInt()
         minSdk = libs.versions.android.minSdk.get().toInt()
 
-        withJava() // enable java compilation support
         withHostTestBuilder {}.configure {}
         withDeviceTestBuilder {
             sourceSetTreeName = "test"
         }
 
-        compilations.configureEach {
-            compilerOptions.configure {
-                jvmTarget.set(
-                    JvmTarget.JVM_11
-                )
-            }
+        compilerOptions {
+            jvmTarget.set(JvmTarget.JVM_11)
         }
     }
     iosX64()
@@ -57,8 +60,8 @@ mavenPublishing {
     )
 
     pom {
-        name.set("KMaP")
-        description.set("Kotlin Multiplatform logging library with notes, scrolls, and async saver delivery.")
+        name.set("Scribe")
+        description.set("Scribe is a Kotlin Multiplatform logging library built around the ideas from loggingsucks.com, so structured logs can model both single events and longer contextual flows.")
         url.set("https://scribe.rafambn.com")
         licenses {
             license {
@@ -79,7 +82,14 @@ mavenPublishing {
         }
     }
 
-    publishToMavenCentral()
+    publishToMavenCentral(automaticRelease = false)
 
     signAllPublications()
+
+    configure(
+        KotlinMultiplatform(
+            javadocJar = JavadocJar.Empty(),
+            sourcesJar = SourcesJar.Sources(),
+        )
+    )
 }
