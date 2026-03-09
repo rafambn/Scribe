@@ -1,34 +1,58 @@
-# Scribe
+<h1 align="center">Scribe</h1>
 
-`Scribe` is a Kotlin Multiplatform logging library with a lore-driven API.
+<p align="center">A flavored Kotlin Multiplatform logging library</p>
 
-- A `Scribe` writes logs
-- A `Note` is a single log line
-- A `Scroll` collects context across a flow
-- A `SealedScroll` is the final immutable result
-- `Saver`s place notes and scrolls onto `shelves` such as console, database, or HTTP backends
+<p align="center">
+  <img src="scribe-logo.svg" alt="Scribe logo" width="180" />
+</p>
 
-## Terminology
+<p align="center">
+  <a href="https://search.maven.org/search?q=g:com.rafambn%20AND%20a:scribe">
+    <img alt="Maven Central" src="https://img.shields.io/maven-central/v/com.rafambn/scribe?label=Maven%20Central">
+  </a>
+  <a href="./LICENSE">
+    <img alt="License" src="https://img.shields.io/badge/license-Apache%202.0-blue.svg">
+  </a>
+  <img alt="Platform Targets" src="https://img.shields.io/badge/targets-android%20%7C%20jvm%20%7C%20ios-0A7EA4">
+</p>
 
-- `note(...)`: suspend function for delivering a single log entry
-- `flingNote(...)`: best-effort non-suspending variant
-- `unrollScroll(...)`: starts a contextual log
-- `seal(...)`: finalizes a scroll and emits a `SealedScroll`
-- `looseSeal(...)`: best-effort non-suspending variant
-- `Margin`: hook that can add fields when a scroll starts or seals
-- `ScribeDeliveryConfig`: queue and overflow behavior for async delivery
+<p align="center">
+  Scribe is a Kotlin Multiplatform logging library built around narrative concepts like <code>Note</code>, <code>Scroll</code>, and <code>SealedScroll</code>, based on the ideas from <a href="https://loggingsucks.com">loggingsucks.com</a>, so structured logs can model both single events and longer contextual flows.
+</p>
 
-## Installation
+<table align="center">
+  <tr>
+    <td align="center">
+      <a href="https://scribe.rafambn.com/"><strong>Documentation Page</strong></a>
+    </td>
+  </tr>
+</table>
 
-Use the `scribe` module directly from this repository, or publish it yourself from this project.
+## Features:
 
-Configured Maven coordinates in this repo:
+- Story-driven logging primitives instead of flat logger calls
+- Single-event logging with `note(...)` and contextual logging with `unrollScroll(...)`
+- Best-effort non-suspending variants with `flingNote(...)` and `looseSeal(...)`
+- Delivery hooks through `NoteSaver`, `ScrollSaver`, and `EntrySaver`
+- Scroll lifecycle enrichment through `Margin`
 
-- Group: `io.github.rafambn`
-- Artifact: `scribe`
-- Version: `1.0.0`
+## Setup
 
-## Create Notes
+Add Scribe to your `commonMain` dependencies:
+
+```kotlin
+kotlin {
+    sourceSets {
+        commonMain.dependencies {
+            implementation("com.rafambn:scribe:0.1.0")
+        }
+    }
+}
+```
+
+## Usage
+
+Create a `Scribe` and emit a note:
 
 ```kotlin
 val scribe = Scribe(
@@ -46,14 +70,12 @@ scribe.note(
 )
 ```
 
-## Create Scrolls
+Use a scroll when you need shared context for a longer flow:
 
 ```kotlin
 val scribe = Scribe(
     shelves = listOf(
-        ScrollSaver { scroll ->
-            println(scroll)
-        }
+        ScrollSaver { scroll -> println(scroll) }
     ),
     imprint = mapOf(
         "service" to JsonPrimitive("billing"),
@@ -68,104 +90,10 @@ scroll.writeBoolean("retry", false)
 scroll.seal(success = true)
 ```
 
-The emitted `SealedScroll` contains:
-
-- `scrollId`
-- `success`
-- `errorMessage`
-- shared `context`
-- scroll-specific `data`
-
-## Saver Types
-
-Use the saver that matches the output you want:
+Choose the saver that matches your output flow:
 
 ```kotlin
 val noteSaver = NoteSaver { note -> println(note) }
 val scrollSaver = ScrollSaver { scroll -> println(scroll) }
-val recordSaver = EntrySaver { record -> println(record) }
+val entrySaver = EntrySaver { record -> println(record) }
 ```
-
-- `NoteSaver` receives only `Note`
-- `ScrollSaver` receives only `SealedScroll`
-- `EntrySaver` receives both
-
-## Margins
-
-`Margin` lets you enrich a scroll at the beginning and end of its lifecycle.
-
-```kotlin
-val timingMargin = object : Margin {
-    override fun header(scroll: Scroll) {
-        scroll.writeNumber("startedAtEpochMs", 1000L)
-    }
-
-    override fun footer(scroll: Scroll) {
-        scroll.writeNumber("sealedAtEpochMs", 2000L)
-    }
-}
-```
-
-## Delivery
-
-`Scribe` delivers records through an internal channel processed on a coroutine scope.
-
-```kotlin
-val scribe = Scribe(
-    shelves = listOf(recordSaver),
-    deliveryConfig = ScribeDeliveryConfig(
-        bufferSize = 256,
-        overflowStrategy = BufferOverflow.DROP_OLDEST,
-        onSaverError = { saver, record, error ->
-            println("Saver $saver failed for $record: $error")
-        }
-    )
-)
-```
-
-Use `flingNote()` and `looseSeal()` when you want a non-suspending best-effort call.
-
-## Lifecycle
-
-`Scribe` defaults to its own internal `CoroutineScope(SupervisorJob() + Dispatchers.Default)`. For lifecycle-bound environments (Android, server frameworks) pass your own scope so cancellation propagates correctly.
-
-```kotlin
-// Simple — uses the built-in scope
-val scribe = Scribe(shelves = listOf(recordSaver))
-
-// Lifecycle-bound — you control when the processor stops
-object AppLog {
-    private val appScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
-
-    val scribe = Scribe(
-        scope = appScope,
-        shelves = listOf(recordSaver),
-    )
-}
-```
-
-Two shutdown options:
-
-- `retire()` — non-suspending, closes the channel and returns immediately. The processor continues draining whatever is already buffered on a best-effort basis. Use this from non-coroutine contexts (e.g. `onDestroy`, shutdown hooks).
-- `planRetire()` — suspending, closes the channel and waits until every buffered entry has been processed. Use this when you need a clean shutdown guarantee.
-
-To stop the processor immediately, cancel the scope you passed to `Scribe`. The library will detect the cancellation and close the channel so subsequent sends fail visibly.
-
-## Uncaught Exceptions
-
-`Scribe` can install a platform uncaught exception hook through `onIgnition`.
-
-```kotlin
-val scribe = Scribe(
-    shelves = listOf(recordSaver),
-    onIgnition = { throwable ->
-        println("Uncaught exception: ${throwable.message}")
-    }
-)
-```
-
-Use this when you want the logger to observe crashes that escape normal application flow.
-
-## Status
-
-This repository is under active development.
