@@ -28,6 +28,7 @@ nav:
   - Getting Started: getting-started.md
   - API Concepts: api-concepts.md
   - Lifecycle and Delivery: lifecycle-and-delivery.md
+  - OpenObserve Showcase: openobserve-showcase.md
 
 markdown_extensions:
   - admonition

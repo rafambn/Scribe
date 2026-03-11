@@ -8,4 +8,6 @@ dependencies:
   - androidx.activity:activity-compose:1.8.2
 
 settings:
+  android:
+    minSdk: 24
   junit: junit-4
