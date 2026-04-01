@@ -3,6 +3,7 @@ package scribe.demo
 import com.rafambn.scribe.Entry
 import com.rafambn.scribe.Note
 import com.rafambn.scribe.SealedScroll
+import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonPrimitive
@@ -19,8 +20,11 @@ enum class ConnectionState {
 
 @Serializable
 data class CheckoutMeta(
+    @SerialName("item_count")
     val itemCount: Int,
+    @SerialName("subtotal_cents")
     val subtotalCents: Int,
+    @SerialName("feature_flag")
     val featureFlag: String,
 )
 
@@ -35,6 +39,7 @@ data class SerializationBuyer(
 data class SerializationLineItem(
     val sku: String,
     val quantity: Int,
+    @SerialName("unit_price_cents")
     val unitPriceCents: Int,
 )
 
@@ -47,8 +52,10 @@ data class SerializationPayment(
 
 @Serializable
 data class SerializationOrderSnapshot(
+    @SerialName("order_id")
     val orderId: String,
     val buyer: SerializationBuyer,
+    @SerialName("line_items")
     val lineItems: List<SerializationLineItem>,
     val payment: SerializationPayment,
     val tags: List<String>,
@@ -91,7 +98,8 @@ fun payloadFromEntry(
             payload["success"] = JsonPrimitive(entry.success)
             entry.errorMessage?.let { payload["error_message"] = JsonPrimitive(it) }
             stringField(entry.data, "message")?.let { payload["message"] = JsonPrimitive(it) }
-            longField(entry.data, "ordemId")?.let { payload["ordemId"] = JsonPrimitive(it) }
+            longField(entry.data, "order_id")?.let { payload["order_id"] = JsonPrimitive(it) }
+                ?: longField(entry.data, "ordemId")?.let { payload["order_id"] = JsonPrimitive(it) }
 
             entry.context.forEach { (key, value) ->
                 payload.putIfAbsent(key, value)

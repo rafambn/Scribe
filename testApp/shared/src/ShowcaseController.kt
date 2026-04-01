@@ -44,15 +44,15 @@ class ShowcaseController {
     private val platform = platformName()
     private val defaultMargin = object : Margin {
         override fun header(scroll: Scroll) {
-            scroll.writeNumber("startedAt", currentEpochMillis())
+            scroll.writeNumber("started_at", currentEpochMillis())
             scroll.writeString("platform_session", platform)
         }
 
         override fun footer(scroll: Scroll) {
-            val startedAt = scroll.read("startedAt")?.jsonPrimitive?.longOrNull ?: return
+            val startedAt = scroll.read("started_at")?.jsonPrimitive?.longOrNull ?: return
             val completedAt = currentEpochMillis()
-            scroll.writeNumber("completedAt", completedAt)
-            scroll.writeNumber("elapsedMs", completedAt - startedAt)
+            scroll.writeNumber("completed_at", completedAt)
+            scroll.writeNumber("elapsed_ms", completedAt - startedAt)
         }
     }
     private var mainScribe: Scribe = createMainScribe()
@@ -119,17 +119,17 @@ class ShowcaseController {
         val scroll = scribe.unrollScroll(id = "template-render-1")
         updateActiveScrolls(scribe.seekScrolls().map(Scroll::id))
         scroll.writeString("demo_name", "string_template_render")
-        scroll.writeString("message", "error on orderId=\$ordemId")
-        scroll.writeNumber("ordemId", 555)
+        scroll.writeString("message", "error on order_id=\$order_id")
+        scroll.writeNumber("order_id", 555)
         scroll.seal(success = true)
         refreshActiveScrolls()
         appendTimeline(
             title = "Template message preview",
-            detail = "Sent scroll with {message: \"error on orderId=\$ordemId\", ordemId: 555}.",
+            detail = "Sent scroll with {message: \"error on order_id=\$order_id\", order_id: 555}.",
             payload = "",
             success = true,
         )
-        updateStatus("Ran string-template scroll demo; inspect message + ordemId rendering in OpenObserve.")
+        updateStatus("Ran string-template scroll demo; inspect message + order_id rendering in OpenObserve.")
     }
 
     fun runCheckoutScenario() = launchScenario("Wide-event scroll demo") {
@@ -222,18 +222,11 @@ class ShowcaseController {
         scroll.writeString("buyer_tier", snapshot.buyer.tier)
         scroll.writeString("primary_sku", snapshot.lineItems.first().sku)
         scroll.writeString("channel", snapshot.metadata["channel"] ?: "unknown")
-        scroll.writeSerializable(
+        scroll.writeNumber("order_item_count", snapshot.lineItems.sumOf(SerializationLineItem::quantity))
+        scroll.writeNumber("order_tag_count", snapshot.tags.size)
+        scroll.writeString(
             "expected_render_checks",
-            listOf(
-                "order_snapshot.orderId",
-                "order_snapshot.buyer.tier",
-                "order_snapshot.lineItems[0].sku",
-                "order_snapshot.metadata.channel",
-                "order_id",
-                "buyer_tier",
-                "primary_sku",
-                "channel",
-            ),
+            "order_snapshot.order_id,order_snapshot.buyer.tier,order_snapshot.line_items[0].sku,order_snapshot.metadata.channel,order_id,buyer_tier,primary_sku,channel,order_item_count,order_tag_count",
         )
         scroll.seal(success = true)
         refreshActiveScrolls()
