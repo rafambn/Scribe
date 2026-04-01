@@ -32,7 +32,7 @@
 
 - Story-driven logging primitives instead of flat logger calls
 - Single-event logging with `note(...)` and contextual logging with `unrollScroll(...)`
-- Best-effort non-suspending variants with `flingNote(...)` and `looseSeal(...)`
+- Best-effort non-suspending variants with `flingNote(...)` (returns `Boolean` acceptance) and `looseSeal(...)`
 - Delivery hooks through `NoteSaver`, `ScrollSaver`, and `EntrySaver`
 - Scroll lifecycle enrichment through `Margin`
 

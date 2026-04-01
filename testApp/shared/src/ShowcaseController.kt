@@ -105,12 +105,18 @@ class ShowcaseController {
 
     fun runFlingNoteScenario() = launchScenario("Best-effort note demo") {
         val scribe = activeMainScribe("best_effort_note") ?: return@launchScenario
-        scribe.flingNote(
+        val accepted = scribe.flingNote(
             tag = "queue",
             message = "Queued fire-and-forget retry audit event",
             level = Urgency.DEBUG,
         )
-        updateStatus("Ran flingNote(...): best-effort note dispatch completed.")
+        updateStatus(
+            if (accepted) {
+                "Ran flingNote(...): best-effort note dispatch accepted by queue."
+            } else {
+                "Ran flingNote(...): queue rejected the note (likely retired or overflowing with SUSPEND)."
+            },
+        )
     }
 
     fun runCheckoutScenario() = launchScenario("Wide-event scroll demo") {

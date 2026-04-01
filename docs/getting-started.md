@@ -41,11 +41,15 @@ scribe.note(
 If you need best-effort fire-and-forget behavior, use `flingNote(...)`:
 
 ```kotlin
-scribe.flingNote(
+val accepted = scribe.flingNote(
     tag = "payments",
     message = "checkout queued",
     level = Urgency.DEBUG,
 )
+
+if (!accepted) {
+    println("Note was rejected by the queue")
+}
 ```
 
 With the saver above, the log output looks like this:

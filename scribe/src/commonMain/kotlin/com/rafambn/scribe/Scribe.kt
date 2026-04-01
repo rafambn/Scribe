@@ -162,8 +162,6 @@ class Scribe(
         )
     }
 
-    // TODO: review silent-drop behavior after retire() — trySend result is intentionally ignored
-    //       (best-effort semantics), but callers have no signal that the entry was discarded.
     /**
      * Emits a [Note] using non-blocking best-effort enqueue.
      *
@@ -171,16 +169,23 @@ class Scribe(
      * @param message note text payload.
      * @param level severity level for the note.
      * @param timestamp epoch milliseconds associated with the note.
+     *
+     * @return `true` when the note was accepted by the queue, `false` when it was rejected.
      */
-    fun flingNote(tag: String, message: String, level: Urgency = Urgency.INFO, timestamp: Long = nowEpochMs()) {
-        queue.trySend(
+    fun flingNote(
+        tag: String,
+        message: String,
+        level: Urgency = Urgency.INFO,
+        timestamp: Long = nowEpochMs(),
+    ): Boolean {
+        return queue.trySend(
             Note(
                 tag = tag,
                 message = message,
                 level = level,
                 timestamp = timestamp,
             ),
-        )
+        ).isSuccess
     }
 
     private fun isProcessorFamily(job: Job?): Boolean {

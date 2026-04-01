@@ -24,7 +24,7 @@ val scribe = Scribe(
 Choose based on backpressure and call-site constraints:
 
 - `note(...)` suspends while sending to the queue
-- `flingNote(...)` is best-effort and does not suspend
+- `flingNote(...)` is best-effort, does not suspend, and returns `false` when the queue rejects the entry
 - `seal(...)` suspends before dispatching the final `SealedScroll`
 - `looseSeal(...)` is best-effort and does not suspend
 

@@ -129,6 +129,18 @@ class ScribeDeliveryRetireTest {
     }
 
     @Test
+    fun flingNote_returns_false_after_retire() {
+        runSuspend {
+            val scribe = scribeWithScrollShelves(RecordingShelf())
+
+            scribe.retire()
+            val accepted = scribe.flingNote(tag = "payments", message = "started", level = Urgency.INFO, timestamp = 123L)
+
+            assertFalse(accepted)
+        }
+    }
+
+    @Test
     fun planRetire_waits_for_pending_events_to_flush() {
         runSuspend {
             val gate = CompletableDeferred<Unit>()

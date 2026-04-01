@@ -12,7 +12,7 @@ Both implement the sealed `Entry` interface, which is what `EntrySaver` receives
 ## Terminology
 
 - `note(...)`: suspending call for a single log entry
-- `flingNote(...)`: non-suspending best-effort note dispatch
+- `flingNote(...)`: non-suspending best-effort note dispatch that returns `Boolean` for enqueue acceptance
 - `unrollScroll(...)`: starts a contextual logging session
 - `seal(...)`: finalizes a scroll and emits a `SealedScroll`
 - `looseSeal(...)`: non-suspending best-effort seal
