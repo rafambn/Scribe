@@ -78,6 +78,8 @@ The UI contains grouped demo actions:
 - `Checkout flow`
 - `Read/erase/seek`
 - `Margins + looseSeal`
+- `JSON object serialization`
+- `String template message`
 - `EntrySaver mixed flow`
 - `Overflow demo`
 - `Saver failure demo`

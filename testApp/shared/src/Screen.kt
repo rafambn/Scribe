@@ -86,6 +86,15 @@ fun Screen() {
                     enabled = !state.isBusy,
                 )
                 ActionGroup(
+                    title = "OpenObserve Rendering Checks",
+                    description = "Validate nested JSON object serialization and string-template rendering in logs.",
+                    buttons = listOf(
+                        "JSON object serialization" to controller::runJsonSerializationScenario,
+                        "String template message" to controller::runStringTemplateScenario,
+                    ),
+                    enabled = !state.isBusy,
+                )
+                ActionGroup(
                     title = "Savers And Delivery",
                     description = "Use the three saver types, queue overflow behavior, and saver error handling.",
                     buttons = listOf(

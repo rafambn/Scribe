@@ -3,10 +3,12 @@ package scribe.demo
 import com.rafambn.scribe.Entry
 import com.rafambn.scribe.Note
 import com.rafambn.scribe.SealedScroll
-import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.longOrNull
 
 enum class ConnectionState {
     IDLE,
@@ -23,77 +25,89 @@ data class CheckoutMeta(
 )
 
 @Serializable
-data class OpenObserveRecord(
-    @SerialName("event_kind")
-    val eventKind: String,
-    @SerialName("_timestamp")
-    val timestamp: Long,
-    @SerialName("demo_name")
-    val demoName: String,
-    @SerialName("platform")
-    val platform: String,
-    @SerialName("app_version")
-    val appVersion: String,
-    @SerialName("saver_type")
-    val saverType: String,
-    @SerialName("tag")
-    val tag: String? = null,
-    @SerialName("message")
-    val message: String? = null,
-    @SerialName("level")
-    val level: String? = null,
-    @SerialName("note_timestamp")
-    val noteTimestamp: Long? = null,
-    @SerialName("scroll_id")
-    val scrollId: String? = null,
-    @SerialName("success")
-    val success: Boolean? = null,
-    @SerialName("error_message")
-    val errorMessage: String? = null,
-    @SerialName("context")
-    val context: Map<String, JsonElement>? = null,
-    @SerialName("data")
-    val data: Map<String, JsonElement>? = null,
-) {
-    companion object {
-        fun fromEntry(
-            entry: Entry,
-            demoName: String,
-            platform: String,
-            saverType: String,
-            appVersion: String,
-            uploadedAt: Long,
-        ): OpenObserveRecord =
-            when (entry) {
-                is Note -> OpenObserveRecord(
-                    eventKind = "note",
-                    timestamp = uploadedAt,
-                    demoName = demoName,
-                    platform = platform,
-                    appVersion = appVersion,
-                    saverType = saverType,
-                    tag = entry.tag,
-                    message = entry.message,
-                    level = entry.level.name,
-                    noteTimestamp = entry.timestamp,
-                )
+data class SerializationBuyer(
+    val id: String,
+    val tier: String,
+    val email: String,
+)
 
-                is SealedScroll -> OpenObserveRecord(
-                    eventKind = "scroll",
-                    timestamp = uploadedAt,
-                    demoName = demoName,
-                    platform = platform,
-                    appVersion = appVersion,
-                    saverType = saverType,
-                    scrollId = entry.scrollId,
-                    success = entry.success,
-                    errorMessage = entry.errorMessage,
-                    context = entry.context,
-                    data = entry.data,
-                )
+@Serializable
+data class SerializationLineItem(
+    val sku: String,
+    val quantity: Int,
+    val unitPriceCents: Int,
+)
+
+@Serializable
+data class SerializationPayment(
+    val method: String,
+    val installments: Int,
+    val currency: String,
+)
+
+@Serializable
+data class SerializationOrderSnapshot(
+    val orderId: String,
+    val buyer: SerializationBuyer,
+    val lineItems: List<SerializationLineItem>,
+    val payment: SerializationPayment,
+    val tags: List<String>,
+    val metadata: Map<String, String>,
+)
+
+typealias OpenObservePayload = Map<String, JsonElement>
+
+fun payloadFromEntry(
+    entry: Entry,
+    demoName: String,
+    platform: String,
+    saverType: String,
+    appVersion: String,
+    uploadedAt: Long,
+): OpenObservePayload =
+    when (entry) {
+        is Note -> linkedMapOf<String, JsonElement>(
+            "_timestamp" to JsonPrimitive(uploadedAt),
+            "event_kind" to JsonPrimitive("note"),
+            "demo_name" to JsonPrimitive(demoName),
+            "platform" to JsonPrimitive(platform),
+            "app_version" to JsonPrimitive(appVersion),
+            "saver_type" to JsonPrimitive(saverType),
+            "tag" to JsonPrimitive(entry.tag),
+            "message" to JsonPrimitive(entry.message),
+            "level" to JsonPrimitive(entry.level.name),
+            "note_timestamp" to JsonPrimitive(entry.timestamp),
+        )
+
+        is SealedScroll -> {
+            val payload = linkedMapOf<String, JsonElement>()
+            payload["_timestamp"] = JsonPrimitive(uploadedAt)
+            payload["event_kind"] = JsonPrimitive("scroll")
+            payload["demo_name"] = JsonPrimitive(stringField(entry.data, "demo_name") ?: demoName)
+            payload["platform"] = JsonPrimitive(platform)
+            payload["app_version"] = JsonPrimitive(appVersion)
+            payload["saver_type"] = JsonPrimitive(saverType)
+            payload["scroll_id"] = JsonPrimitive(entry.scrollId)
+            payload["success"] = JsonPrimitive(entry.success)
+            entry.errorMessage?.let { payload["error_message"] = JsonPrimitive(it) }
+            stringField(entry.data, "message")?.let { payload["message"] = JsonPrimitive(it) }
+            longField(entry.data, "ordemId")?.let { payload["ordemId"] = JsonPrimitive(it) }
+
+            entry.context.forEach { (key, value) ->
+                payload.putIfAbsent(key, value)
             }
+            entry.data.forEach { (key, value) ->
+                payload.putIfAbsent(key, value)
+            }
+            payload
+        }
     }
-}
+
+private fun stringField(data: Map<String, JsonElement>, key: String): String? =
+    data[key]?.jsonPrimitive?.contentOrNull
+
+private fun longField(data: Map<String, JsonElement>, key: String): Long? =
+    data[key]?.jsonPrimitive?.longOrNull
 
 data class TimelineItem(
     val title: String,
@@ -118,11 +132,26 @@ data class ShowcaseUiState(
     val ignitionMessage: String = "The onIgnition hook is wired, but the demo does not crash itself to trigger it.",
 )
 
-fun recordSummary(record: OpenObserveRecord): String =
-    when (record.eventKind) {
+fun recordSummary(record: OpenObservePayload): String =
+    when (payloadEventKind(record)) {
         "note" -> "${record.tag ?: "note"} ${record.level ?: ""}".trim()
-        else -> "${record.scrollId ?: "scroll"} success=${record.success}"
+        else -> "${record.scroll_id ?: "scroll"} success=${record.success}"
     }
+
+fun payloadEventKind(record: OpenObservePayload): String =
+    record["event_kind"]?.jsonPrimitive?.contentOrNull ?: "unknown"
+
+private val OpenObservePayload.tag: String?
+    get() = this["tag"]?.jsonPrimitive?.contentOrNull
+
+private val OpenObservePayload.level: String?
+    get() = this["level"]?.jsonPrimitive?.contentOrNull
+
+private val OpenObservePayload.scroll_id: String?
+    get() = this["scroll_id"]?.jsonPrimitive?.contentOrNull
+
+private val OpenObservePayload.success: String?
+    get() = this["success"]?.jsonPrimitive?.contentOrNull
 
 fun sampleImprint(platform: String): Map<String, JsonElement> = mapOf(
     "service" to JsonPrimitive("scribe-showcase"),

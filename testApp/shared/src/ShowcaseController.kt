@@ -26,6 +26,7 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.longOrNull
 import kotlinx.serialization.json.jsonPrimitive
 
@@ -105,18 +106,30 @@ class ShowcaseController {
 
     fun runFlingNoteScenario() = launchScenario("Best-effort note demo") {
         val scribe = activeMainScribe("best_effort_note") ?: return@launchScenario
-        val accepted = scribe.flingNote(
+        scribe.flingNote(
             tag = "queue",
             message = "Queued fire-and-forget retry audit event",
             level = Urgency.DEBUG,
         )
-        updateStatus(
-            if (accepted) {
-                "Ran flingNote(...): best-effort note dispatch accepted by queue."
-            } else {
-                "Ran flingNote(...): queue rejected the note (likely retired or overflowing with SUSPEND)."
-            },
+        updateStatus("Ran flingNote(...): best-effort note dispatch attempted.")
+    }
+
+    fun runStringTemplateScenario() = launchScenario("String template scroll demo") {
+        val scribe = activeMainScribe("string_template_render") ?: return@launchScenario
+        val scroll = scribe.unrollScroll(id = "template-render-1")
+        updateActiveScrolls(scribe.seekScrolls().map(Scroll::id))
+        scroll.writeString("demo_name", "string_template_render")
+        scroll.writeString("message", "error on orderId=\$ordemId")
+        scroll.writeNumber("ordemId", 555)
+        scroll.seal(success = true)
+        refreshActiveScrolls()
+        appendTimeline(
+            title = "Template message preview",
+            detail = "Sent scroll with {message: \"error on orderId=\$ordemId\", ordemId: 555}.",
+            payload = "",
+            success = true,
         )
+        updateStatus("Ran string-template scroll demo; inspect message + ordemId rendering in OpenObserve.")
     }
 
     fun runCheckoutScenario() = launchScenario("Wide-event scroll demo") {
@@ -177,6 +190,56 @@ class ShowcaseController {
         updateStatus("Ran Margin header/footer hooks and looseSeal(...) with an error payload.")
     }
 
+    fun runJsonSerializationScenario() = launchScenario("JSON serialization scroll demo") {
+        val scribe = activeMainScribe("json_serialization") ?: return@launchScenario
+        val scroll = scribe.unrollScroll(id = "json-serialization-1")
+        updateActiveScrolls(scribe.seekScrolls().map(Scroll::id))
+        val snapshot = SerializationOrderSnapshot(
+            orderId = "order-555",
+            buyer = SerializationBuyer(
+                id = "buyer-123",
+                tier = "gold",
+                email = "buyer-123@example.com",
+            ),
+            lineItems = listOf(
+                SerializationLineItem(sku = "SKU-CHAIR-42", quantity = 1, unitPriceCents = 129_900),
+                SerializationLineItem(sku = "SKU-LAMP-10", quantity = 2, unitPriceCents = 24_990),
+            ),
+            payment = SerializationPayment(
+                method = "credit_card",
+                installments = 3,
+                currency = "USD",
+            ),
+            tags = listOf("openobserve", "serialization-test", "nested-object"),
+            metadata = mapOf(
+                "channel" to "web",
+                "experiment" to "openobserve-json-object",
+            ),
+        )
+        scroll.writeString("demo_name", "json_serialization")
+        scroll.writeSerializable("order_snapshot", snapshot)
+        scroll.writeString("order_id", snapshot.orderId)
+        scroll.writeString("buyer_tier", snapshot.buyer.tier)
+        scroll.writeString("primary_sku", snapshot.lineItems.first().sku)
+        scroll.writeString("channel", snapshot.metadata["channel"] ?: "unknown")
+        scroll.writeSerializable(
+            "expected_render_checks",
+            listOf(
+                "order_snapshot.orderId",
+                "order_snapshot.buyer.tier",
+                "order_snapshot.lineItems[0].sku",
+                "order_snapshot.metadata.channel",
+                "order_id",
+                "buyer_tier",
+                "primary_sku",
+                "channel",
+            ),
+        )
+        scroll.seal(success = true)
+        refreshActiveScrolls()
+        updateStatus("Ran JSON serialization demo with a nested object payload for OpenObserve inspection.")
+    }
+
     fun runEntrySaverScenario() = launchScenario("Unified EntrySaver demo") {
         val scribe = activeMainScribe("entry_saver_demo") ?: return@launchScenario
         scribe.note(
@@ -200,7 +263,7 @@ class ShowcaseController {
             delay(600)
         }
         val trackingSaver = entryUploadSaver(demoName, "EntrySaver") { record ->
-            record.message?.let(deliveredMessages::add)
+            record["message"]?.jsonPrimitive?.contentOrNull?.let(deliveredMessages::add)
         }
         withScribe(
             demoName = demoName,
@@ -420,7 +483,7 @@ class ShowcaseController {
     private fun noteUploadSaver(
         demoName: String,
         saverType: String,
-        onRecord: (OpenObserveRecord) -> Unit = {},
+        onRecord: (OpenObservePayload) -> Unit = {},
     ): NoteSaver = NoteSaver { note ->
         uploadRecord(note, demoName, saverType, onRecord)
     }
@@ -428,7 +491,7 @@ class ShowcaseController {
     private fun scrollUploadSaver(
         demoName: String,
         saverType: String,
-        onRecord: (OpenObserveRecord) -> Unit = {},
+        onRecord: (OpenObservePayload) -> Unit = {},
     ): ScrollSaver = ScrollSaver { scroll ->
         uploadRecord(scroll, demoName, saverType, onRecord)
     }
@@ -436,7 +499,7 @@ class ShowcaseController {
     private fun entryUploadSaver(
         demoName: String,
         saverType: String,
-        onRecord: (OpenObserveRecord) -> Unit = {},
+        onRecord: (OpenObservePayload) -> Unit = {},
     ): EntrySaver = EntrySaver { entry ->
         uploadRecord(entry, demoName, saverType, onRecord)
     }
@@ -445,9 +508,9 @@ class ShowcaseController {
         entry: Entry,
         demoName: String,
         saverType: String,
-        onRecord: (OpenObserveRecord) -> Unit,
+        onRecord: (OpenObservePayload) -> Unit,
     ) {
-        val record = OpenObserveRecord.fromEntry(
+        val record = payloadFromEntry(
             entry = entry,
             demoName = demoName,
             platform = platform,
@@ -466,7 +529,7 @@ class ShowcaseController {
             )
         }
         appendTimeline(
-            title = "${record.eventKind} via $saverType",
+            title = "${payloadEventKind(record)} via $saverType",
             detail = "${recordSummary(record)}. ${result.getOrElse { error -> error.message ?: "Upload failed." }}",
             payload = payload,
             success = result.isSuccess,

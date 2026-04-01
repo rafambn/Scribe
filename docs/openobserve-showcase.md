@@ -79,10 +79,12 @@ or:
 1. Run `Checkout flow` and inspect the wide-event payload in `scribe_demo`.
 2. Run `Read/erase/seek` to see custom scroll IDs and scroll mutation helpers in action.
 3. Run `Margins + looseSeal` and verify the timing fields in the uploaded scroll.
-4. Run `EntrySaver mixed flow` to send a note and a scroll through one saver path.
-5. Run `Overflow demo` and confirm that not every emitted event survives the configured buffer policy.
-6. Run `Saver failure demo` and observe that `onSaverError` reports the failure while the next saver still uploads the record.
-7. Compare `retire()` with `planRetire()` by running both shutdown demos and inspecting the in-app timeline.
+4. Run `JSON object serialization` to validate how nested payload fields appear in OpenObserve.
+5. Run `String template message` to inspect how interpolated text is rendered in the `message` field.
+6. Run `EntrySaver mixed flow` to send a note and a scroll through one saver path.
+7. Run `Overflow demo` and confirm that not every emitted event survives the configured buffer policy.
+8. Run `Saver failure demo` and observe that `onSaverError` reports the failure while the next saver still uploads the record.
+9. Compare `retire()` with `planRetire()` by running both shutdown demos and inspecting the in-app timeline.
 
 ## Querying In OpenObserve
 

@@ -2,6 +2,7 @@ package scribe.demo
 
 import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonObject
 
 private const val DEFAULT_ORG = "default"
 
@@ -44,12 +45,13 @@ class OpenObserveClient(
         message
     }
 
-    suspend fun upload(record: OpenObserveRecord): Result<String> = runCatching {
+    suspend fun upload(record: OpenObservePayload): Result<String> = runCatching {
+        val jsonRecord = JsonObject(record)
         val response = platformHttpPostJson(
             url = "${config.baseUrl.trimEnd('/')}/api/${config.organization}/${config.stream}/_json",
             username = config.username,
             password = config.password,
-            body = json.encodeToString(ListSerializer(OpenObserveRecord.serializer()), listOf(record)),
+            body = json.encodeToString(ListSerializer(JsonObject.serializer()), listOf(jsonRecord)),
         )
         if (response.statusCode !in 200..299) {
             error("Upload failed with HTTP ${response.statusCode}: ${response.body}")
@@ -57,6 +59,6 @@ class OpenObserveClient(
         "Uploaded to ${config.stream} with HTTP ${response.statusCode}."
     }
 
-    fun prettyRecord(record: OpenObserveRecord): String =
-        json.encodeToString(OpenObserveRecord.serializer(), record)
+    fun prettyRecord(record: OpenObservePayload): String =
+        json.encodeToString(JsonObject.serializer(), JsonObject(record))
 }
