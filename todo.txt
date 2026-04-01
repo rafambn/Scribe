@@ -1,0 +1,12 @@
+- Add concurrency/stress tests — validate thread safety under high-throughput concurrent writes (e.g., 1000 coroutines writing simultaneously)
+- Test the GlobalExceptionHandler — the expect/actual exception handler implementations have zero tests. At minimum, test the JVM implementation
+- Test double-seal behavior on Scroll — verify that sealing a Scroll twice is well-defined and tested
+- Add feedback on flingNote() silent drops — consider returning a Boolean indicating whether the entry was accepted, so callers can react
+- Add internal logging for processor job cancellation — when the processor job is cancelled, the cause is swallowed. Add a callback or optional logger parameter to help users debug integration issues
+- Add Scroll query by ID — seekScrolls() returns all active scrolls, add a seekScroll(id) for direct lookup
+- Test JSON object serialization on the OpenObserve app test
+- Test if OpenObserve supports string templates (e.g., "message: the error occurred on order=$orderId, orderId: 555") and how they render in the dashboard
+- Improve the lifecycle of the Scribe channel and how it is generated/managed
+- Inspect https://messagetemplates.org/ and try to incorporate its concepts into the library (structured message templates with named holes, semantic logging)
+- Add a new Saver dedicated to capturing and reporting the library's own internal errors
+- Improve the Scribe logo
