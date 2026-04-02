@@ -1,6 +1,1 @@
-- Add internal logging for processor job cancellation — when the processor job is cancelled, the cause is swallowed. Add a callback or optional logger parameter to help users debug integration issues
-- Improve the lifecycle of the Scribe channel and how it is generated/managed
-- Inspect https://messagetemplates.org/ and try to incorporate its concepts into the library (structured message templates with named holes, semantic logging)
-- Add a new Saver dedicated to capturing and reporting the library's own internal errors
 - Improve the Scribe logo
-- Make scribe singleton, remove scroll map from inside scribe
