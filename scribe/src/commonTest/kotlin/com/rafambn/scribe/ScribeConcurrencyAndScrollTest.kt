@@ -40,7 +40,7 @@ class ScribeConcurrencyAndScrollTest {
         runSuspend {
             val shelf = RecordingShelf()
             val scribe = scribeWithScrollShelves(shelf)
-            val scroll = scribe.unrollScroll(id = "scroll-id")
+            val scroll = scribe.newScroll(id = "scroll-id")
 
             scroll["state"] = JsonPrimitive("initial")
             val first = scroll.seal(success = false, error = IllegalStateException("first"))

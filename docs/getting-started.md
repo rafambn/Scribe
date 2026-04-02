@@ -75,7 +75,7 @@ Scribe.inscribe {
 }
 Scribe.hire()
 
-val scroll = Scribe.unrollScroll(id = "checkout-42")
+val scroll = Scribe.newScroll(id = "checkout-42")
 scroll.writeString("gateway", "stripe")
 scroll.writeNumber("attempt", 1)
 scroll.writeBoolean("retry", false)

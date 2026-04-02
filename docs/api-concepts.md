@@ -13,7 +13,7 @@ Both implement the sealed `Entry` interface, which is what `EntrySaver` receives
 
 - `note(...)`: suspending call for a single log entry
 - `flingNote(...)`: non-suspending best-effort note dispatch that returns `Boolean` for enqueue acceptance
-- `unrollScroll(...)`: starts a contextual logging session
+- `newScroll(...)`: starts a contextual logging session
 - `seal(...)`: finalizes a scroll and emits a `SealedScroll`
 - `looseSeal(...)`: non-suspending best-effort seal
 - `Margin`: hook for writing fields at open/close boundaries
@@ -28,14 +28,14 @@ Both implement the sealed `Entry` interface, which is what `EntrySaver` receives
 - delivery behavior through `Scribe.hire(deliveryConfig = ...)`
 - optional lifecycle hooks through `Margin`
 
-You can inspect active scrolls with `seekScrolls()` and create a new one with `unrollScroll()`.
+You can inspect active scrolls with `seekScrolls()` and create a new one with `newScroll()`.
 
 ## `Scroll`
 
 `Scroll` collects structured fields until it is sealed.
 
 ```kotlin
-val scroll = Scribe.unrollScroll("checkout-42")
+val scroll = Scribe.newScroll("checkout-42")
 scroll.writeString("gateway", "stripe")
 scroll.writeNumber("attempt", 1)
 scroll.writeBoolean("retry", false)

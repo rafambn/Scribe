@@ -83,7 +83,7 @@ object Scribe {
      *
      * @param id optional custom scroll id. When null, a unique id is generated.
      */
-    fun unrollScroll(id: String? = null): Scroll {
+    fun newScroll(id: String? = null): Scroll {
         val cfg = requireConfig()
         val resolvedId = id ?: newScrollId()
         val scroll: Scroll = mutableMapOf()
@@ -102,7 +102,7 @@ object Scribe {
         val queue = activeQueue ?: return
         val runningProcessor = processorJob
         queue.close()
-        clearActiveRuntime()
+        activeQueue = null
         val callerJob = currentCoroutineContext()[Job]
         if (runningProcessor != null && !isProcessorFamily(runningProcessor, callerJob)) {
             runningProcessor.join()
@@ -131,22 +131,11 @@ object Scribe {
         )
     }
 
-    private fun clearActiveRuntime() {
-        activeQueue = null
-    }
-
     private fun requireConfig(): Inscribe =
         config ?: throw IllegalStateException("Scribe is not initialized. Call Scribe.inscribe(...) first.")
 
-    private fun ensureActive() {
-        if (activeQueue == null) {
-            throw IllegalStateException("Scribe runtime is not active. Call Scribe.hire(...) first.")
-        }
-    }
-
     private fun requireActiveQueue(): Channel<Entry> {
-        ensureActive()
-        return checkNotNull(activeQueue)
+        return activeQueue ?: throw IllegalStateException("Scribe runtime is not active. Call Scribe.hire(...) first.")
     }
 
     internal suspend fun enqueue(entry: Entry) {

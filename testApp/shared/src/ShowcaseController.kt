@@ -116,7 +116,7 @@ class ShowcaseController {
 
     fun runStringTemplateScenario() = launchScenario("String template scroll demo") {
         val scribe = activeMainScribe("string_template_render") ?: return@launchScenario
-        val scroll = scribe.unrollScroll(id = "template-render-1")
+        val scroll = scribe.newScroll(id = "template-render-1")
         updateActiveScrolls(scribe.seekScrolls().map(Scroll::id))
         scroll.writeString("demo_name", "string_template_render")
         scroll.writeString("message", "error on order_id=\$order_id")
@@ -134,7 +134,7 @@ class ShowcaseController {
 
     fun runCheckoutScenario() = launchScenario("Wide-event scroll demo") {
         val scribe = activeMainScribe("checkout_scroll") ?: return@launchScenario
-        val scroll = scribe.unrollScroll()
+        val scroll = scribe.newScroll()
         updateActiveScrolls(scribe.seekScrolls().map(Scroll::id))
         scroll.writeString("demo_name", "checkout_scroll")
         scroll.writeString("order_id", "order-42")
@@ -151,12 +151,12 @@ class ShowcaseController {
         )
         scroll.seal(success = true)
         refreshActiveScrolls()
-        updateStatus("Ran unrollScroll + writeSerializable + seal for a wide checkout event.")
+        updateStatus("Ran newScroll + writeSerializable + seal for a wide checkout event.")
     }
 
     fun runInspectionScenario() = launchScenario("Scroll inspection demo") {
         val scribe = activeMainScribe("inspection_scroll") ?: return@launchScenario
-        val scroll = scribe.unrollScroll(id = "ops-demo-42")
+        val scroll = scribe.newScroll(id = "ops-demo-42")
         scroll.writeString("demo_name", "inspection_scroll")
         scroll.writeString("phase", "validation")
         scroll.writeBoolean("retryable", true)
@@ -178,7 +178,7 @@ class ShowcaseController {
 
     fun runMarginScenario() = launchScenario("Margin and looseSeal demo") {
         val scribe = activeMainScribe("margin_scroll") ?: return@launchScenario
-        val scroll = scribe.unrollScroll(id = "inventory-sync-1")
+        val scroll = scribe.newScroll(id = "inventory-sync-1")
         updateActiveScrolls(scribe.seekScrolls().map(Scroll::id))
         scroll.writeString("demo_name", "margin_scroll")
         scroll.writeString("flow", "inventory-sync")
@@ -192,7 +192,7 @@ class ShowcaseController {
 
     fun runJsonSerializationScenario() = launchScenario("JSON serialization scroll demo") {
         val scribe = activeMainScribe("json_serialization") ?: return@launchScenario
-        val scroll = scribe.unrollScroll(id = "json-serialization-1")
+        val scroll = scribe.newScroll(id = "json-serialization-1")
         updateActiveScrolls(scribe.seekScrolls().map(Scroll::id))
         val snapshot = SerializationOrderSnapshot(
             orderId = "order-555",
@@ -240,7 +240,7 @@ class ShowcaseController {
             message = "Session accepted for staff dashboard",
             level = Urgency.INFO,
         )
-        val scroll = scribe.unrollScroll(id = "session-audit")
+        val scroll = scribe.newScroll(id = "session-audit")
         scroll.writeString("demo_name", "entry_saver_demo")
         scroll.writeString("role", "support")
         scroll.writeBoolean("elevated_access", true)

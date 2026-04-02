@@ -25,7 +25,7 @@ class ScribeDeliveryRetireTest {
             val shelf2 = RecordingShelf()
             val scribe = scribeWithScrollShelves(shelf1, shelf2)
 
-            scribe.unrollScroll(id = "scroll-a").seal()
+            scribe.newScroll(id = "scroll-a").seal()
             shelf1.awaitEvents(1)
             shelf2.awaitEvents(1)
             scribe.retire()
@@ -46,7 +46,7 @@ class ScribeDeliveryRetireTest {
             )
 
             scribe.note(tag = "payments", message = "started", level = Urgency.INFO, timestamp = 100L)
-            scribe.unrollScroll(id = "scroll-1").seal()
+            scribe.newScroll(id = "scroll-1").seal()
             scrollShelf.awaitEvents(1)
             noteSaver.awaitEvents(1)
             allSaver.awaitEvents(2)
@@ -67,7 +67,7 @@ class ScribeDeliveryRetireTest {
                 channel = Channel(capacity = 4, onBufferOverflow = BufferOverflow.DROP_OLDEST),
             )
 
-            scribe.unrollScroll(id = "slow").seal()
+            scribe.newScroll(id = "slow").seal()
             assertEquals(0, shelf.events.size)
 
             gate.complete(Unit)
@@ -83,9 +83,9 @@ class ScribeDeliveryRetireTest {
             val shelf = RecordingShelf()
             val scribe = scribeWithScrollShelves(shelf)
 
-            scribe.unrollScroll(id = "first").seal()
+            scribe.newScroll(id = "first").seal()
             delay(500)
-            scribe.unrollScroll(id = "second").seal()
+            scribe.newScroll(id = "second").seal()
             shelf.awaitEvents(2)
             scribe.retire()
 
@@ -120,7 +120,7 @@ class ScribeDeliveryRetireTest {
             val shelf = BlockingShelf(gate, firstWriteStarted)
             val scribe = scribeWithScrollShelves(shelf)
 
-            scribe.unrollScroll(id = "in-flight").seal()
+            scribe.newScroll(id = "in-flight").seal()
             firstWriteStarted.await()
             val retireScope = CoroutineScope(Dispatchers.Default)
             val retireJob = retireScope.launch { scribe.retire() }
@@ -153,7 +153,7 @@ class ScribeDeliveryRetireTest {
             val shelf = BlockingShelf(gate, firstWriteStarted)
             val scribe = scribeWithScrollShelves(shelf)
 
-            scribe.unrollScroll(id = "flush-me").seal()
+            scribe.newScroll(id = "flush-me").seal()
             firstWriteStarted.await()
 
             val retireScope = CoroutineScope(Dispatchers.Default)

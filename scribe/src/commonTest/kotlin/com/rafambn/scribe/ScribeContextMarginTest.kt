@@ -9,7 +9,7 @@ import kotlin.test.assertNotNull
 
 class ScribeContextMarginTest {
     @Test
-    fun unrollScroll_includes_context_data_in_event() {
+    fun newScroll_includes_context_data_in_event() {
         runSuspend {
             val shelf = RecordingShelf()
             val imprint = mapOf(
@@ -18,7 +18,7 @@ class ScribeContextMarginTest {
             )
             val scribe = scribeWithScrollShelves(shelf, imprint = imprint)
 
-            scribe.unrollScroll().seal()
+            scribe.newScroll().seal()
             shelf.awaitEvents(1)
             scribe.retire()
 
@@ -35,8 +35,8 @@ class ScribeContextMarginTest {
             val imprint = mapOf("region" to JsonPrimitive("us-east"))
             val scribe = scribeWithScrollShelves(shelf, imprint = imprint)
 
-            scribe.unrollScroll(id = "first").seal()
-            scribe.unrollScroll(id = "second").seal()
+            scribe.newScroll(id = "first").seal()
+            scribe.newScroll(id = "second").seal()
             shelf.awaitEvents(2)
             scribe.retire()
 
@@ -56,7 +56,7 @@ class ScribeContextMarginTest {
             val shelf = RecordingShelf()
             val imprint = mapOf("region" to JsonPrimitive("us-east"))
             val scribe = scribeWithScrollShelves(shelf, imprint = imprint)
-            val scroll = scribe.unrollScroll()
+            val scroll = scribe.newScroll()
 
             scroll["region"] = JsonPrimitive("ap-south")
             scroll.seal()
@@ -84,7 +84,7 @@ class ScribeContextMarginTest {
             }
             val scribe = scribeWithScrollShelves(shelf, margins = timestampMargin)
 
-            scribe.unrollScroll().seal()
+            scribe.newScroll().seal()
             shelf.awaitEvents(1)
             scribe.retire()
 
@@ -100,7 +100,7 @@ class ScribeContextMarginTest {
             val shelf = RecordingShelf()
             val scribe = scribeWithScrollShelves(shelf, margins = null)
 
-            scribe.unrollScroll().seal()
+            scribe.newScroll().seal()
             shelf.awaitEvents(1)
             scribe.retire()
 
@@ -128,7 +128,7 @@ class ScribeContextMarginTest {
             }
             val scribe = scribeWithScrollShelves(shelf, margins = elapsedMargin)
 
-            scribe.unrollScroll().seal()
+            scribe.newScroll().seal()
             shelf.awaitEvents(1)
             scribe.retire()
 
@@ -154,7 +154,7 @@ class ScribeContextMarginTest {
             }
             val scribe = scribeWithScrollShelves(shelf, margins = margin)
 
-            scribe.unrollScroll().seal()
+            scribe.newScroll().seal()
             scribe.retire()
 
             assertEquals(listOf("header", "footer"), calls)

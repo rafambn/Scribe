@@ -10,11 +10,11 @@ import kotlin.test.assertTrue
 
 class ScribeScrollLifecycleTest {
     @Test
-    fun unrollScroll_creates_scroll_for_the_given_shelf() {
+    fun newScroll_creates_scroll_for_the_given_shelf() {
         runSuspend {
             val shelf = RecordingShelf()
             val scribe = scribeWithScrollShelves(shelf)
-            val scroll = scribe.unrollScroll()
+            val scroll = scribe.newScroll()
             scroll["method"] = JsonPrimitive("card")
             scroll.seal(success = true)
             shelf.awaitEvents(1)
@@ -32,7 +32,7 @@ class ScribeScrollLifecycleTest {
         runSuspend {
             val shelf = RecordingShelf()
             val scribe = scribeWithScrollShelves(shelf)
-            val scroll = scribe.unrollScroll()
+            val scroll = scribe.newScroll()
 
             scroll["gateway"] = JsonPrimitive("stripe")
 
@@ -56,8 +56,8 @@ class ScribeScrollLifecycleTest {
             val scribe = scribeWithScrollShelves(shelf)
             val paymentService = PaymentService()
 
-            val scroll1 = scribe.unrollScroll()
-            val scroll2 = scribe.unrollScroll()
+            val scroll1 = scribe.newScroll()
+            val scroll2 = scribe.newScroll()
 
             paymentService.pay("order1", scroll1)
             assertFailsWith<IllegalStateException> {
@@ -84,7 +84,7 @@ class ScribeScrollLifecycleTest {
         runSuspend {
             val shelf = RecordingShelf()
             val scribe = scribeWithScrollShelves(shelf)
-            val ids = (1..500).map { scribe.unrollScroll().id }
+            val ids = (1..500).map { scribe.newScroll().id }
 
             assertEquals(ids.size, ids.toSet().size)
             assertTrue(ids.all { UUID_REGEX.matches(it) })
@@ -92,11 +92,11 @@ class ScribeScrollLifecycleTest {
     }
 
     @Test
-    fun unrollScroll_uses_custom_id() {
+    fun newScroll_uses_custom_id() {
         runSuspend {
             val shelf = RecordingShelf()
             val scribe = scribeWithScrollShelves(shelf)
-            val scroll = scribe.unrollScroll(id = "session-42")
+            val scroll = scribe.newScroll(id = "session-42")
 
             scroll["operation"] = JsonPrimitive("sync")
             scroll.seal()
@@ -110,12 +110,12 @@ class ScribeScrollLifecycleTest {
     }
 
     @Test
-    fun unrollScroll_allows_reusing_custom_id_without_internal_tracking() {
+    fun newScroll_allows_reusing_custom_id_without_internal_tracking() {
         runSuspend {
             val shelf = RecordingShelf()
             val scribe = scribeWithScrollShelves(shelf)
-            val first = scribe.unrollScroll(id = "session-42")
-            val second = scribe.unrollScroll(id = "session-42")
+            val first = scribe.newScroll(id = "session-42")
+            val second = scribe.newScroll(id = "session-42")
 
             assertEquals("session-42", first.id)
             assertEquals("session-42", second.id)
@@ -128,10 +128,10 @@ class ScribeScrollLifecycleTest {
             val shelf = RecordingShelf()
             val scribe = scribeWithScrollShelves(shelf)
 
-            scribe.unrollScroll(id = "session-42").seal()
+            scribe.newScroll(id = "session-42").seal()
             shelf.awaitEvents(1)
 
-            val reused = scribe.unrollScroll(id = "session-42")
+            val reused = scribe.newScroll(id = "session-42")
             assertEquals("session-42", reused.id)
             scribe.retire()
         }
@@ -142,7 +142,7 @@ class ScribeScrollLifecycleTest {
         runSuspend {
             val shelf = RecordingShelf()
             val scribe = scribeWithScrollShelves(shelf)
-            val originalScroll = scribe.unrollScroll(id = "shared")
+            val originalScroll = scribe.newScroll(id = "shared")
             val tracked = mutableMapOf(originalScroll.id to originalScroll)
 
             originalScroll["stage"] = JsonPrimitive("created")

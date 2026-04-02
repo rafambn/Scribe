@@ -13,7 +13,7 @@ class ScribeDataSerializationTest {
         runSuspend {
             val shelf = RecordingShelf()
             val scribe = scribeWithScrollShelves(shelf)
-            val scroll = scribe.unrollScroll()
+            val scroll = scribe.newScroll()
 
             scroll["meta"] = Json.encodeToJsonElement(GatewayMeta.serializer(), GatewayMeta(retries = 2))
             scroll.seal()
@@ -30,7 +30,7 @@ class ScribeDataSerializationTest {
         runSuspend {
             val shelf = RecordingShelf()
             val scribe = scribeWithScrollShelves(shelf)
-            val scroll = scribe.unrollScroll()
+            val scroll = scribe.newScroll()
 
             scroll["message"] = JsonPrimitive("accepted")
             scroll["attempt"] = JsonPrimitive(3)
@@ -51,7 +51,7 @@ class ScribeDataSerializationTest {
     fun map_can_store_serializable_json_value() {
         runSuspend {
             val scribe = scribeWithScrollShelves(RecordingShelf())
-            val scroll = scribe.unrollScroll()
+            val scroll = scribe.newScroll()
 
             scroll["meta"] = Json.encodeToJsonElement(GatewayMeta.serializer(), GatewayMeta(retries = 2))
             assertEquals(JsonObject(mapOf("retries" to JsonPrimitive(2))), scroll["meta"])
@@ -62,7 +62,7 @@ class ScribeDataSerializationTest {
     fun map_accepts_numeric_values() {
         runSuspend {
             val scribe = scribeWithScrollShelves(RecordingShelf())
-            val scroll = scribe.unrollScroll()
+            val scroll = scribe.newScroll()
 
             scroll["latency_ms"] = JsonPrimitive(123)
             assertEquals(JsonPrimitive(123), scroll["latency_ms"])
@@ -74,7 +74,7 @@ class ScribeDataSerializationTest {
         runSuspend {
             val shelf = RecordingShelf()
             val scribe = scribeWithScrollShelves(shelf)
-            val scroll = scribe.unrollScroll()
+            val scroll = scribe.newScroll()
 
             scroll["key"] = JsonPrimitive("value")
             assertEquals(JsonPrimitive("value"), scroll["key"])
@@ -90,7 +90,7 @@ class ScribeDataSerializationTest {
         runSuspend {
             val shelf = RecordingShelf()
             val scribe = scribeWithScrollShelves(shelf)
-            val scroll = scribe.unrollScroll()
+            val scroll = scribe.newScroll()
 
             scroll["key"] = JsonPrimitive("value")
             scroll.seal()

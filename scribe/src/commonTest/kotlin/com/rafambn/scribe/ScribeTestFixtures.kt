@@ -91,7 +91,7 @@ internal fun <T> runSuspend(block: suspend () -> T): T = runBlocking { block() }
 
 internal suspend fun createScribeInHelperAndEmit(shelf: ScrollSaver): Scribe {
     val scribe = scribeWithScrollShelves(shelf)
-    scribe.unrollScroll(id = "scoped").seal()
+    scribe.newScroll(id = "scoped").seal()
     return scribe
 }
 

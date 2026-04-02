@@ -31,7 +31,7 @@
 ## Features:
 
 - Story-driven logging primitives instead of flat logger calls
-- Single-event logging with `note(...)` and contextual logging with `unrollScroll(...)`
+- Single-event logging with `note(...)` and contextual logging with `newScroll(...)`
 - Best-effort non-suspending variants with `flingNote(...)` (returns `Boolean` acceptance) and `looseSeal(...)`
 - Delivery hooks through `NoteSaver`, `ScrollSaver`, and `EntrySaver`
 - Scroll lifecycle enrichment through `Margin`
@@ -85,7 +85,7 @@ Scribe.inscribe {
 }
 Scribe.hire()
 
-val scroll = Scribe.unrollScroll(id = "checkout-42")
+val scroll = Scribe.newScroll(id = "checkout-42")
 scroll.writeString("gateway", "stripe")
 scroll.writeNumber("attempt", 1)
 scroll.writeBoolean("retry", false)

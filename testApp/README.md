@@ -6,7 +6,7 @@ This app is a guided demo for the published `com.rafambn:scribe:0.1.0` library. 
 
 - `note(...)`
 - `flingNote(...)`
-- `unrollScroll(...)` with generated and custom IDs
+- `newScroll(...)` with generated and custom IDs
 - `writeString`, `writeNumber`, `writeBoolean`, `writeSerializable`
 - `read(...)`, `erase(...)`, `seekScrolls()`
 - `seal(...)`, `looseSeal(...)`

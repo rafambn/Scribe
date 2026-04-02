@@ -8,7 +8,7 @@ The app covers the current public runtime features of Scribe:
 
 - `note(...)`
 - `flingNote(...)`
-- `unrollScroll(...)`
+- `newScroll(...)`
 - generated and custom scroll IDs
 - `writeString`, `writeNumber`, `writeBoolean`, `writeSerializable`
 - `read(...)`, `erase(...)`, `seekScrolls()`
