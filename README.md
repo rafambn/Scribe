@@ -55,13 +55,13 @@ kotlin {
 Initialize `Scribe`, hire the runtime, and emit a note:
 
 ```kotlin
-Scribe.init(
+Scribe.init {
     shelves = listOf(
         NoteSaver { note ->
             println("[${note.level}] ${note.tag}: ${note.message}")
         }
     )
-)
+}
 Scribe.hire()
 
 Scribe.note(
@@ -74,15 +74,15 @@ Scribe.note(
 Use a scroll when you need shared context for a longer flow:
 
 ```kotlin
-Scribe.init(
+Scribe.init {
     shelves = listOf(
         ScrollSaver { scroll -> println(scroll) }
-    ),
+    )
     imprint = mapOf(
         "service" to JsonPrimitive("billing"),
         "environment" to JsonPrimitive("production"),
     )
-)
+}
 Scribe.hire()
 
 val scroll = Scribe.unrollScroll(id = "checkout-42")

@@ -23,9 +23,9 @@ Both implement the sealed `Entry` interface, which is what `EntrySaver` receives
 
 `Scribe` is the entry point. It owns:
 
-- one or more savers (`shelf` or `shelves`)
+- one or more savers (`shelves`)
 - an optional shared `imprint`
-- delivery behavior through `ScribeDeliveryConfig`
+- delivery behavior through `Scribe.hire(deliveryConfig = ...)`
 - optional lifecycle hooks through `Margin`
 
 You can inspect active scrolls with `seekScrolls()` and create a new one with `unrollScroll()`.
@@ -71,17 +71,18 @@ val timingMargin = object : Margin {
 ## Delivery Configuration
 
 ```kotlin
-Scribe.init(
-    shelf = entrySaver,
+Scribe.init {
+    shelves = listOf(entrySaver)
+}
+Scribe.hire(
     deliveryConfig = ScribeDeliveryConfig(
         bufferSize = 256,
         overflowStrategy = BufferOverflow.DROP_OLDEST,
         onSaverError = { saver, entry, error ->
             println("Saver $saver failed for $entry: $error")
         }
-    )
+    ),
 )
-Scribe.hire()
 ```
 
 ## Event Shapes
@@ -108,7 +109,9 @@ SealedScroll(
 ## Failure Handling
 
 ```kotlin
-Scribe.init(shelf = entrySaver)
+Scribe.init {
+    shelves = listOf(entrySaver)
+}
 Scribe.hire(
     onIgnition = { throwable ->
         println("Uncaught exception: ${throwable.message}")

@@ -13,10 +13,15 @@ import kotlinx.serialization.json.JsonElement
  * Process-wide event writer that creates [Scroll]s and dispatches [Entry] objects to configured savers.
  */
 object Scribe {
+    class InitDsl internal constructor() {
+        var shelves: List<Saver<*>> = emptyList()
+        var imprint: Map<String, JsonElement> = emptyMap()
+        var margins: Margin? = null
+    }
+
     private class InitConfig(
         val shelves: List<Saver<*>>,
         val imprint: Map<String, JsonElement> = emptyMap(),
-        val deliveryConfig: ScribeDeliveryConfig = ScribeDeliveryConfig(),
         val margins: Margin? = null,
     )
 
@@ -30,37 +35,15 @@ object Scribe {
      *
      * This function can be called only once per process lifetime.
      */
-    fun init(
-        shelves: List<Saver<*>>,
-        imprint: Map<String, JsonElement> = emptyMap(),
-        deliveryConfig: ScribeDeliveryConfig = ScribeDeliveryConfig(),
-        margins: Margin? = null,
-    ) {
+    fun init(block: InitDsl.() -> Unit) {
         check(config == null) { "Scribe is already initialized and cannot be initialized again." }
-        require(deliveryConfig.bufferSize >= -2) { "BufferSize must be >= -2. Check Channel documentation" }
-        require(shelves.isNotEmpty()) { "At least one shelf is required." }
+        val dsl = InitDsl().apply(block)
+        val configuredShelves = dsl.shelves
+        require(configuredShelves.isNotEmpty()) { "At least one shelf is required." }
         config = InitConfig(
-            shelves = shelves.toList(),
-            imprint = imprint,
-            deliveryConfig = deliveryConfig,
-            margins = margins,
-        )
-    }
-
-    /**
-     * Convenience initializer for a single saver.
-     */
-    fun init(
-        shelf: Saver<*>,
-        imprint: Map<String, JsonElement> = emptyMap(),
-        deliveryConfig: ScribeDeliveryConfig = ScribeDeliveryConfig(),
-        margins: Margin? = null,
-    ) {
-        init(
-            shelves = listOf(shelf),
-            imprint = imprint,
-            deliveryConfig = deliveryConfig,
-            margins = margins,
+            shelves = configuredShelves.toList(),
+            imprint = dsl.imprint,
+            margins = dsl.margins,
         )
     }
 
@@ -69,17 +52,19 @@ object Scribe {
      */
     fun hire(
         scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Default),
+        deliveryConfig: ScribeDeliveryConfig = ScribeDeliveryConfig(),
         onIgnition: ((Throwable) -> Unit)? = null,
     ) {
         val cfg = requireConfig()
         check(activeQueue == null) { "Scribe runtime is already active. Call retire() or planRetire() first." }
         check(processorJob?.isActive != true) { "Scribe is still retiring. Wait for pending delivery to finish." }
+        require(deliveryConfig.bufferSize >= -2) { "BufferSize must be >= -2. Check Channel documentation" }
         if (onIgnition != null) {
             installUncaughtExceptionHandler(onIgnition)
         }
         val queue = Channel<Entry>(
-            capacity = cfg.deliveryConfig.bufferSize,
-            onBufferOverflow = cfg.deliveryConfig.overflowStrategy,
+            capacity = deliveryConfig.bufferSize,
+            onBufferOverflow = deliveryConfig.overflowStrategy,
         )
         activeQueue = queue
         val createdProcessor = scope.launch {
@@ -92,7 +77,7 @@ object Scribe {
                             is NoteSaver if entry is Note -> saver.write(entry)
                         }
                     } catch (e: Throwable) {
-                        cfg.deliveryConfig.onSaverError(saver, entry, e)
+                        deliveryConfig.onSaverError(saver, entry, e)
                     }
                 }
             }

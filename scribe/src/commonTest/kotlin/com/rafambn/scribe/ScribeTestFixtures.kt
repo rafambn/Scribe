@@ -47,11 +47,11 @@ private val delegatingEntrySaver = EntrySaver { entry ->
 
 private fun ensureScribeInitialized() {
     if (initialized) return
-    Scribe.init(
-        shelves = listOf(delegatingEntrySaver),
-        imprint = defaultTestImprint,
-        margins = delegatingMargin,
-    )
+    Scribe.init {
+        shelves = listOf(delegatingEntrySaver)
+        imprint = defaultTestImprint
+        margins = delegatingMargin
+    }
     initialized = true
 }
 
@@ -66,7 +66,7 @@ internal fun scribeWithScrollShelves(
     activeDelegatedSavers = shelves.toList()
     activeMargin = margins
     onSaverErrorCallback = deliveryConfig.onSaverError
-    Scribe.hire()
+    Scribe.hire(deliveryConfig = deliveryConfig)
     return Scribe
 }
 
@@ -80,7 +80,7 @@ internal fun scribeWithSavers(
     activeDelegatedSavers = shelves
     activeMargin = margins
     onSaverErrorCallback = deliveryConfig.onSaverError
-    Scribe.hire()
+    Scribe.hire(deliveryConfig = deliveryConfig)
     return Scribe
 }
 

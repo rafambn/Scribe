@@ -5,19 +5,20 @@
 `Scribe` sends entries through an internal `Channel` before invoking savers. This gives you one place to tune buffering and overflow behavior.
 
 ```kotlin
-Scribe.init(
-    shelf = EntrySaver { entry ->
+Scribe.init {
+    shelves = listOf(EntrySaver { entry ->
         println(entry)
-    },
+    })
+}
+Scribe.hire(
     deliveryConfig = ScribeDeliveryConfig(
         bufferSize = 256,
         overflowStrategy = BufferOverflow.DROP_OLDEST,
         onSaverError = { saver, entry, error ->
             println("Saver $saver failed for $entry: ${error.message}")
         }
-    )
+    ),
 )
-Scribe.hire()
 ```
 
 ## Suspending vs Best-Effort APIs
@@ -34,13 +35,13 @@ Choose based on backpressure and call-site constraints:
 `imprint` adds fields to every new `Scroll` created by the same `Scribe`.
 
 ```kotlin
-Scribe.init(
-    shelf = ScrollSaver { println(it) },
+Scribe.init {
+    shelves = listOf(ScrollSaver { println(it) })
     imprint = mapOf(
         "app" to JsonPrimitive("checkout"),
         "region" to JsonPrimitive("us-east-1"),
     )
-)
+}
 Scribe.hire()
 ```
 
@@ -61,10 +62,10 @@ val timingMargin = object : Margin {
     }
 }
 
-Scribe.init(
-    shelf = ScrollSaver { println(it) },
-    margins = timingMargin,
-)
+Scribe.init {
+    shelves = listOf(ScrollSaver { println(it) })
+    margins = timingMargin
+}
 Scribe.hire()
 ```
 
@@ -82,9 +83,9 @@ Use `planRetire()` when shutdown correctness matters more than speed.
 Pass `onIgnition` to install the platform uncaught exception hook:
 
 ```kotlin
-Scribe.init(
-    shelf = EntrySaver { println(it) },
-)
+Scribe.init {
+    shelves = listOf(EntrySaver { println(it) })
+}
 Scribe.hire(
     onIgnition = { throwable ->
         println("Uncaught exception: ${throwable.message}")

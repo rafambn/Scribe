@@ -383,14 +383,14 @@ class ShowcaseController {
     private fun createMainScribe(): Scribe =
         Scribe.also {
             if (!scribeInitialized) {
-                Scribe.init(
-                    shelves = listOf(entryUploadSaver("shared_session", "EntrySaver")),
+                Scribe.init {
+                    shelves = listOf(entryUploadSaver("shared_session", "EntrySaver"))
                     imprint = sampleImprint(platform) + mapOf(
                         "stream" to JsonPrimitive(config.stream),
                         "session_kind" to JsonPrimitive("persistent-demo"),
-                    ),
-                    margins = defaultMargin,
-                )
+                    )
+                    margins = defaultMargin
+                }
                 scribeInitialized = true
             }
             Scribe.hire(

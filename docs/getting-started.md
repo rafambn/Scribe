@@ -19,11 +19,11 @@ kotlin {
 The smallest setup is a single saver. A `NoteSaver` only receives `Note` events:
 
 ```kotlin
-Scribe.init(
-    shelf = NoteSaver { note ->
+Scribe.init {
+    shelves = listOf(NoteSaver { note ->
         println("[${note.level}] ${note.tag}: ${note.message}")
-    }
-)
+    })
+}
 Scribe.hire()
 ```
 
@@ -64,15 +64,15 @@ With the saver above, the log output looks like this:
 `Scroll` is for multi-step operations where context accumulates before a final result is emitted.
 
 ```kotlin
-Scribe.init(
-    shelf = ScrollSaver { scroll ->
+Scribe.init {
+    shelves = listOf(ScrollSaver { scroll ->
         println(scroll)
-    },
+    })
     imprint = mapOf(
         "service" to JsonPrimitive("billing"),
         "environment" to JsonPrimitive("production"),
     )
-)
+}
 Scribe.hire()
 
 val scroll = Scribe.unrollScroll(id = "checkout-42")
