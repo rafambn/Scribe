@@ -8,6 +8,7 @@ import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonPrimitive
 
 /**
  * Process-wide event writer that creates [Scroll]s and dispatches [Entry] objects to configured savers.
@@ -20,10 +21,9 @@ object Scribe {
         var onIgnition: ((Throwable) -> Unit)? = null
     }
 
-    private var config: Inscribe? = null
+    internal var config: Inscribe? = null
     private var activeQueue: Channel<Entry>? = null
     private var processorJob: Job? = null
-    private val scrollsById = mutableMapOf<String, Scroll>()
 
     /**
      * Initializes the singleton with immutable parameters.
@@ -84,46 +84,19 @@ object Scribe {
     }
 
     /**
-     * Returns all currently created scrolls.
-     */
-    fun seekScrolls(): List<Scroll> {
-        ensureActive()
-        return scrollsById.values.toList()
-    }
-
-    /**
      * Creates a new scroll, optionally with a custom unique [id].
      *
      * @param id optional custom scroll id. When null, a unique id is generated.
      */
     fun unrollScroll(id: String? = null): Scroll {
         val cfg = requireConfig()
-        val queue = requireActiveQueue()
-        val resolvedId = when {
-            id == null -> {
-                var generatedId = newScrollId()
-                while (scrollsById.containsKey(generatedId)) {
-                    generatedId = newScrollId()
-                }
-                generatedId
-            }
-
-            scrollsById.containsKey(id) -> {
-                throw IllegalArgumentException("A scroll with id '$id' already exists.")
-            }
-
-            else -> id
+        val resolvedId = id ?: newScrollId()
+        val scroll: Scroll = mutableMapOf()
+        scroll["scroll_id"] = JsonPrimitive(resolvedId)
+        cfg.imprint.forEach { (key, value) ->
+            scroll[key] = value
         }
-
-        val scroll = Scroll(
-            id = resolvedId,
-            imprint = cfg.imprint,
-            onSeal = { cfg.margins?.footer(it) },
-            onSealed = { scrollsById.remove(it.id) },
-            emitSealedScroll = { queue.send(it) },
-        )
         cfg.margins?.header(scroll)
-        scrollsById[resolvedId] = scroll
         return scroll
     }
 
@@ -165,7 +138,6 @@ object Scribe {
 
     private fun clearActiveRuntime() {
         activeQueue = null
-        scrollsById.clear()
     }
 
     private fun requireConfig(): Inscribe =
@@ -180,6 +152,10 @@ object Scribe {
     private fun requireActiveQueue(): Channel<Entry> {
         ensureActive()
         return checkNotNull(activeQueue)
+    }
+
+    internal suspend fun enqueue(entry: Entry) {
+        requireActiveQueue().send(entry)
     }
 
     private fun isProcessorFamily(root: Job, target: Job?): Boolean {

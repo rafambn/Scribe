@@ -9,6 +9,7 @@ import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeout
+import kotlinx.serialization.json.jsonPrimitive
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -106,7 +107,7 @@ class ScribeDeliveryRetireTest {
             shelf.awaitEvents(1)
             scribe.retire()
 
-            assertEquals("scoped", shelf.events.single().scrollId)
+            assertEquals("scoped", shelf.events.single().data["scroll_id"]?.jsonPrimitive?.content)
         }
     }
 
@@ -127,7 +128,7 @@ class ScribeDeliveryRetireTest {
             gate.complete(Unit)
             withTimeout(2_000) { retireJob.join() }
             retireScope.cancel()
-            assertEquals("in-flight", shelf.events.single().scrollId)
+            assertEquals("in-flight", shelf.events.single().data["scroll_id"]?.jsonPrimitive?.content)
         }
     }
 
@@ -163,7 +164,7 @@ class ScribeDeliveryRetireTest {
             withTimeout(2_000) { retireJob.join() }
             retireScope.cancel()
 
-            assertEquals("flush-me", shelf.events.single().scrollId)
+            assertEquals("flush-me", shelf.events.single().data["scroll_id"]?.jsonPrimitive?.content)
         }
     }
 

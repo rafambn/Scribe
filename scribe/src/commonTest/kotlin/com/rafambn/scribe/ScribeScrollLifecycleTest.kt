@@ -6,7 +6,6 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertFailsWith
 import kotlin.test.assertNotNull
-import kotlin.test.assertSame
 import kotlin.test.assertTrue
 
 class ScribeScrollLifecycleTest {
@@ -16,18 +15,13 @@ class ScribeScrollLifecycleTest {
             val shelf = RecordingShelf()
             val scribe = scribeWithScrollShelves(shelf)
             val scroll = scribe.unrollScroll()
-
-            assertEquals(1, scribe.seekScrolls().size)
-            assertSame(scroll, scribe.seekScrolls().single())
-
-            scroll.writeSerializable("method", "card")
+            scroll["method"] = JsonPrimitive("card")
             scroll.seal(success = true)
             shelf.awaitEvents(1)
-            assertTrue(scribe.seekScrolls().isEmpty())
             scribe.retire()
 
             val event = shelf.events.single()
-            assertEquals(scroll.id, event.scrollId)
+            assertEquals(scroll.id, (event.data["scroll_id"] as? JsonPrimitive)?.content)
             assertEquals(JsonPrimitive("card"), event.data["method"])
             assertTrue(event.success)
         }
@@ -40,20 +34,18 @@ class ScribeScrollLifecycleTest {
             val scribe = scribeWithScrollShelves(shelf)
             val scroll = scribe.unrollScroll()
 
-            scroll.writeSerializable("gateway", "stripe")
-            assertFalse(scroll.isSealed)
+            scroll["gateway"] = JsonPrimitive("stripe")
 
             scroll.seal(success = false, error = IllegalStateException("fail"))
             scroll.seal(success = true)
-            shelf.awaitEvents(1)
-            assertTrue(scribe.seekScrolls().isEmpty())
+            shelf.awaitEvents(2)
             scribe.retire()
-
-            assertTrue(scroll.isSealed)
-            val event = shelf.events.single()
-            assertFalse(event.success)
-            assertEquals("fail", event.errorMessage)
-            assertEquals(JsonPrimitive("stripe"), event.data["gateway"])
+            val firstEvent = shelf.events.first()
+            val secondEvent = shelf.events.last()
+            assertFalse(firstEvent.success)
+            assertEquals("fail", firstEvent.errorMessage)
+            assertTrue(secondEvent.success)
+            assertEquals(JsonPrimitive("stripe"), firstEvent.data["gateway"])
         }
     }
 
@@ -74,11 +66,10 @@ class ScribeScrollLifecycleTest {
             scroll1.seal(success = true)
             scroll2.seal(success = true)
             shelf.awaitEvents(2)
-            assertTrue(scribe.seekScrolls().isEmpty())
             scribe.retire()
 
-            val successEvent = shelf.events.firstOrNull { it.scrollId == scroll1.id }
-            val failureEvent = shelf.events.firstOrNull { it.scrollId == scroll2.id }
+            val successEvent = shelf.events.firstOrNull { (it.data["scroll_id"] as? JsonPrimitive)?.content == scroll1.id }
+            val failureEvent = shelf.events.firstOrNull { (it.data["scroll_id"] as? JsonPrimitive)?.content == scroll2.id }
 
             assertNotNull(successEvent)
             assertNotNull(failureEvent)
@@ -107,29 +98,27 @@ class ScribeScrollLifecycleTest {
             val scribe = scribeWithScrollShelves(shelf)
             val scroll = scribe.unrollScroll(id = "session-42")
 
-            scroll.writeString("operation", "sync")
+            scroll["operation"] = JsonPrimitive("sync")
             scroll.seal()
             shelf.awaitEvents(1)
             scribe.retire()
 
             val event = shelf.events.single()
             assertEquals("session-42", scroll.id)
-            assertEquals("session-42", event.scrollId)
+            assertEquals("session-42", (event.data["scroll_id"] as? JsonPrimitive)?.content)
         }
     }
 
     @Test
-    fun unrollScroll_throws_when_custom_id_already_exists() {
+    fun unrollScroll_allows_reusing_custom_id_without_internal_tracking() {
         runSuspend {
             val shelf = RecordingShelf()
             val scribe = scribeWithScrollShelves(shelf)
-            scribe.unrollScroll(id = "session-42")
+            val first = scribe.unrollScroll(id = "session-42")
+            val second = scribe.unrollScroll(id = "session-42")
 
-            val thrown = assertFailsWith<IllegalArgumentException> {
-                scribe.unrollScroll(id = "session-42")
-            }
-
-            assertEquals("A scroll with id 'session-42' already exists.", thrown.message)
+            assertEquals("session-42", first.id)
+            assertEquals("session-42", second.id)
         }
     }
 
@@ -149,19 +138,19 @@ class ScribeScrollLifecycleTest {
     }
 
     @Test
-    fun seekScrolls_returns_same_scroll_reference_with_shared_updates() {
+    fun user_managed_map_can_track_scroll_references() {
         runSuspend {
             val shelf = RecordingShelf()
             val scribe = scribeWithScrollShelves(shelf)
             val originalScroll = scribe.unrollScroll(id = "shared")
+            val tracked = mutableMapOf(originalScroll.id to originalScroll)
 
-            originalScroll.writeString("stage", "created")
-            val sameScroll = scribe.seekScrolls().single()
-            originalScroll.writeString("status", "updated")
+            originalScroll["stage"] = JsonPrimitive("created")
+            originalScroll["status"] = JsonPrimitive("updated")
+            val sameScroll = tracked.getValue("shared")
 
-            assertSame(originalScroll, sameScroll)
-            assertEquals(JsonPrimitive("created"), sameScroll.read("stage"))
-            assertEquals(JsonPrimitive("updated"), sameScroll.read("status"))
+            assertEquals(JsonPrimitive("created"), sameScroll["stage"])
+            assertEquals(JsonPrimitive("updated"), sameScroll["status"])
             scribe.retire()
         }
     }

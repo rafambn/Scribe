@@ -15,15 +15,13 @@ sealed interface Entry
  */
 @Serializable
 data class SealedScroll(
-    val scrollId: String,
     val success: Boolean,
     val errorMessage: String?,
-    val context: Map<String, JsonElement>,
     val data: Map<String, JsonElement>,
 ): Entry
 
 /**
- * Lightweight standalone log message emitted through [Scribe.note] or [Scribe.flingNote].
+ * Lightweight standalone log message emitted through [Scribe.note].
  */
 @Serializable
 data class Note(

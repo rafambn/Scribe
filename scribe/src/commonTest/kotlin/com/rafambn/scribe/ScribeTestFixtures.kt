@@ -95,13 +95,13 @@ internal suspend fun createScribeInHelperAndEmit(shelf: ScrollSaver): Scribe {
 internal class PaymentService {
     suspend fun pay(orderId: String, scroll: Scroll) {
         try {
-            scroll.writeSerializable("scrollId", scroll.id)
+            scroll["scrollId"] = JsonPrimitive(scroll.id)
             if (orderId == "order2") {
                 throw IllegalStateException("order2 failed")
             }
-            scroll.writeSerializable("gateway", "stripe")
+            scroll["gateway"] = JsonPrimitive("stripe")
         } catch (t: Throwable) {
-            scroll.writeSerializable("error_stage", "gateway_call")
+            scroll["error_stage"] = JsonPrimitive("gateway_call")
             scroll.seal(success = false, error = t)
             throw t
         }

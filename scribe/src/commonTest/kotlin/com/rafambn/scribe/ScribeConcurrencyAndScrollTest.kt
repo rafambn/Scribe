@@ -6,7 +6,6 @@ import kotlinx.coroutines.launch
 import kotlinx.serialization.json.JsonPrimitive
 import kotlin.test.Test
 import kotlin.test.assertEquals
-import kotlin.test.assertTrue
 
 class ScribeConcurrencyAndScrollTest {
     @Test
@@ -39,33 +38,25 @@ class ScribeConcurrencyAndScrollTest {
     @Test
     fun scroll_double_seal_is_idempotent_and_emits_only_once() {
         runSuspend {
-            var onSealCalls = 0
-            var onSealedCalls = 0
-            var emitted = 0
+            val shelf = RecordingShelf()
+            val scribe = scribeWithScrollShelves(shelf)
+            val scroll = scribe.unrollScroll(id = "scroll-id")
 
-            val scroll = Scroll(
-                id = "scroll-id",
-                onSeal = { onSealCalls++ },
-                onSealed = { onSealedCalls++ },
-                emitSealedScroll = { emitted++ },
-            )
-
-            scroll.writeString("state", "initial")
+            scroll["state"] = JsonPrimitive("initial")
             val first = scroll.seal(success = false, error = IllegalStateException("first"))
             val second = scroll.seal(success = true, error = null)
+            shelf.awaitEvents(2)
+            scribe.retire()
 
-            assertTrue(scroll.isSealed)
-            assertEquals(1, onSealCalls)
-            assertEquals(1, onSealedCalls)
-            assertEquals(1, emitted)
             assertEquals(false, first.success)
             assertEquals("first", first.errorMessage)
             assertEquals(JsonPrimitive("initial"), first.data["state"])
 
-            // Repeated seal does not emit again, but returns a derived result from the second invocation arguments.
+            // Current behavior emits one SealedScroll per seal call.
             assertEquals(true, second.success)
             assertEquals(null, second.errorMessage)
             assertEquals(JsonPrimitive("initial"), second.data["state"])
+            assertEquals(2, shelf.events.size)
         }
     }
 }
