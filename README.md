@@ -52,18 +52,19 @@ kotlin {
 
 ## Usage
 
-Create a `Scribe` and emit a note:
+Initialize `Scribe`, hire the runtime, and emit a note:
 
 ```kotlin
-val scribe = Scribe(
+Scribe.init(
     shelves = listOf(
         NoteSaver { note ->
             println("[${note.level}] ${note.tag}: ${note.message}")
         }
     )
 )
+Scribe.hire()
 
-scribe.note(
+Scribe.note(
     tag = "payments",
     message = "starting checkout",
     level = Urgency.INFO,
@@ -73,7 +74,7 @@ scribe.note(
 Use a scroll when you need shared context for a longer flow:
 
 ```kotlin
-val scribe = Scribe(
+Scribe.init(
     shelves = listOf(
         ScrollSaver { scroll -> println(scroll) }
     ),
@@ -82,8 +83,9 @@ val scribe = Scribe(
         "environment" to JsonPrimitive("production"),
     )
 )
+Scribe.hire()
 
-val scroll = scribe.unrollScroll(id = "checkout-42")
+val scroll = Scribe.unrollScroll(id = "checkout-42")
 scroll.writeString("gateway", "stripe")
 scroll.writeNumber("attempt", 1)
 scroll.writeBoolean("retry", false)

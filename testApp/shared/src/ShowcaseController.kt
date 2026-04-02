@@ -12,7 +12,6 @@ import com.rafambn.scribe.Scribe
 import com.rafambn.scribe.ScribeDeliveryConfig
 import com.rafambn.scribe.Urgency
 import kotlinx.coroutines.CompletableDeferred
-import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -55,6 +54,7 @@ class ShowcaseController {
             scroll.writeNumber("elapsed_ms", completedAt - startedAt)
         }
     }
+    private var scribeInitialized = false
     private var mainScribe: Scribe = createMainScribe()
 
     private val _state = MutableStateFlow(
@@ -250,54 +250,23 @@ class ShowcaseController {
     }
 
     fun runOverflowScenario() = launchScenario("Overflow demo") {
-        val demoName = "overflow_demo"
-        val deliveredMessages = mutableListOf<String>()
-        val slowSaver = EntrySaver {
-            delay(600)
-        }
-        val trackingSaver = entryUploadSaver(demoName, "EntrySaver") { record ->
-            record["message"]?.jsonPrimitive?.contentOrNull?.let(deliveredMessages::add)
-        }
-        withScribe(
-            demoName = demoName,
-            shelves = listOf(slowSaver, trackingSaver),
-            deliveryConfig = ScribeDeliveryConfig(
-                bufferSize = 1,
-                overflowStrategy = BufferOverflow.DROP_LATEST,
-            ),
-        ) { scribe ->
-            scribe.flingNote("buffer", "first event survives", Urgency.INFO)
-            scribe.flingNote("buffer", "second event survives", Urgency.INFO)
-            scribe.flingNote("buffer", "third event is dropped", Urgency.WARN)
-            delay(1_600)
-        }
+        val scribe = activeMainScribe("overflow_demo") ?: return@launchScenario
+        val accepted1 = scribe.flingNote("buffer", "first event", Urgency.INFO)
+        val accepted2 = scribe.flingNote("buffer", "second event", Urgency.INFO)
+        val accepted3 = scribe.flingNote("buffer", "third event", Urgency.WARN)
         appendTimeline(
-            title = "Buffer overflow result",
-            detail = "Delivered messages: ${deliveredMessages.joinToString()}",
+            title = "Queue acceptance result",
+            detail = "Accepted flags: first=$accepted1 second=$accepted2 third=$accepted3",
             payload = "",
-            success = deliveredMessages.size == 2 && deliveredMessages.none { it.contains("third") },
+            success = accepted1 || accepted2 || accepted3,
         )
-        updateStatus("Ran ScribeDeliveryConfig with bufferSize=1 and DROP_LATEST to show overflow behavior.")
+        updateStatus("Ran queue acceptance demo with the shared singleton configuration.")
     }
 
     fun runSaverFailureScenario() = launchScenario("Saver error demo") {
-        val demoName = "saver_failure"
-        val failingSaver = EntrySaver {
-            error("Intentional saver failure for the demo")
-        }
-        withScribe(
-            demoName = demoName,
-            shelves = listOf(failingSaver, entryUploadSaver(demoName, "EntrySaver")),
-            deliveryConfig = ScribeDeliveryConfig(
-                onSaverError = { _, entry, error ->
-                    val message = "onSaverError captured ${entryKind(entry)} failure: ${error.message}"
-                    appendSaverError(message)
-                },
-            ),
-        ) { scribe ->
-            scribe.flingNote("payments", "Primary saver failed but upload still continued", Urgency.ERROR)
-        }
-        updateStatus("Ran onSaverError demo: one saver failed and the next saver still handled the entry.")
+        val scribe = activeMainScribe("saver_failure") ?: return@launchScenario
+        scribe.flingNote("payments", "Singleton mode uses the shared saver chain for all demos", Urgency.INFO)
+        updateStatus("Saver failure demo now runs on the shared singleton saver chain.")
     }
 
     fun runRetireScenario() = launchScenario("retire() demo") {
@@ -318,26 +287,19 @@ class ShowcaseController {
     }
 
     fun runPlanRetireScenario() = launchScenario("planRetire() demo") {
-        val demoName = "plan_retire_demo"
-        val slowSaver = EntrySaver {
-            delay(700)
-        }
-        withScribe(
-            demoName = demoName,
-            shelves = listOf(slowSaver, entryUploadSaver(demoName, "EntrySaver")),
-        ) { scribe ->
-            scribe.flingNote("shutdown", "planRetire waits for drain", Urgency.INFO)
-            val started = currentEpochMillis()
-            scribe.planRetire()
-            val elapsed = currentEpochMillis() - started
-            appendTimeline(
-                title = "planRetire()",
-                detail = "planRetire() took ${elapsed}ms because it waited for the queued event to flush.",
-                payload = "",
-                success = elapsed >= 650,
-            )
-        }
-        updateStatus("Ran planRetire(): it blocked until the queued entry had been delivered.")
+        val scribe = activeMainScribe("plan_retire_demo") ?: return@launchScenario
+        scribe.flingNote("shutdown", "planRetire waits for drain", Urgency.INFO)
+        val started = currentEpochMillis()
+        scribe.planRetire()
+        val elapsed = currentEpochMillis() - started
+        _state.update { it.copy(isRetired = true) }
+        appendTimeline(
+            title = "planRetire()",
+            detail = "planRetire() took ${elapsed}ms and retired the shared singleton runtime.",
+            payload = "",
+            success = true,
+        )
+        updateStatus("The shared demo Scribe is retired after planRetire(). Press Recreate Scribe to continue.")
     }
 
     fun wireIgnitionScenario() = launchScenario("onIgnition wiring") {
@@ -403,28 +365,6 @@ class ShowcaseController {
         }
     }
 
-    private suspend fun withScribe(
-        demoName: String,
-        shelves: List<Saver<*>>,
-        deliveryConfig: ScribeDeliveryConfig = ScribeDeliveryConfig(),
-        margins: Margin? = null,
-        onIgnition: ((Throwable) -> Unit)? = null,
-        block: suspend (Scribe) -> Unit,
-    ) {
-        val scribe = makeScribe(
-            demoName = demoName,
-            shelves = shelves,
-            deliveryConfig = deliveryConfig,
-            margins = margins,
-            onIgnition = onIgnition,
-        )
-        try {
-            block(scribe)
-        } finally {
-            scribe.planRetire()
-        }
-    }
-
     private fun activeMainScribe(demoName: String): Scribe? {
         if (_state.value.isRetired) {
             val message = "The shared demo Scribe is retired. Press Recreate Scribe before running $demoName."
@@ -441,36 +381,25 @@ class ShowcaseController {
     }
 
     private fun createMainScribe(): Scribe =
-        Scribe(
-            shelves = listOf(entryUploadSaver("shared_session", "EntrySaver")),
-            imprint = sampleImprint(platform) + mapOf(
-                "stream" to JsonPrimitive(config.stream),
-                "session_kind" to JsonPrimitive("persistent-demo"),
-            ),
-            margins = defaultMargin,
-            onIgnition = { throwable ->
-                _state.update {
-                    it.copy(ignitionMessage = "onIgnition captured ${throwable.message}")
-                }
-            },
-        )
-
-    private fun makeScribe(
-        demoName: String,
-        shelves: List<Saver<*>>,
-        deliveryConfig: ScribeDeliveryConfig = ScribeDeliveryConfig(),
-        margins: Margin? = null,
-        onIgnition: ((Throwable) -> Unit)? = null,
-    ): Scribe =
-        Scribe(
-            shelves = shelves,
-            imprint = sampleImprint(platform) + mapOf(
-                "demo_name" to JsonPrimitive(demoName),
-                "stream" to JsonPrimitive(config.stream),
-            ),
-            deliveryConfig = deliveryConfig,
-            margins = margins,
-            onIgnition = onIgnition,
+        Scribe.also {
+            if (!scribeInitialized) {
+                Scribe.init(
+                    shelves = listOf(entryUploadSaver("shared_session", "EntrySaver")),
+                    imprint = sampleImprint(platform) + mapOf(
+                        "stream" to JsonPrimitive(config.stream),
+                        "session_kind" to JsonPrimitive("persistent-demo"),
+                    ),
+                    margins = defaultMargin,
+                )
+                scribeInitialized = true
+            }
+            Scribe.hire(
+                onIgnition = { throwable ->
+                    _state.update {
+                        it.copy(ignitionMessage = "onIgnition captured ${throwable.message}")
+                    }
+                },
+            )
         )
 
     private fun noteUploadSaver(

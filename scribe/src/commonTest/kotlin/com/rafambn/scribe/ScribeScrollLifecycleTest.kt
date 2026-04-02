@@ -74,6 +74,7 @@ class ScribeScrollLifecycleTest {
             scroll1.seal(success = true)
             scroll2.seal(success = true)
             shelf.awaitEvents(2)
+            assertTrue(scribe.seekScrolls().isEmpty())
             scribe.retire()
 
             val successEvent = shelf.events.firstOrNull { it.scrollId == scroll1.id }
@@ -81,7 +82,6 @@ class ScribeScrollLifecycleTest {
 
             assertNotNull(successEvent)
             assertNotNull(failureEvent)
-            assertTrue(scribe.seekScrolls().isEmpty())
             assertTrue(successEvent.success)
             assertFalse(failureEvent.success)
             assertEquals("order2 failed", failureEvent.errorMessage)

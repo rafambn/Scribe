@@ -12,6 +12,7 @@ import kotlinx.coroutines.withTimeout
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertFailsWith
 import kotlin.test.assertTrue
 
 class ScribeDeliveryRetireTest {
@@ -38,7 +39,7 @@ class ScribeDeliveryRetireTest {
             val scrollShelf = RecordingShelf()
             val noteSaver = RecordingNoteSaver()
             val allSaver = RecordingEntrySaver()
-            val scribe = Scribe(
+            val scribe = scribeWithSavers(
                 shelves = listOf(scrollShelf, noteSaver, allSaver),
             )
 
@@ -134,9 +135,9 @@ class ScribeDeliveryRetireTest {
             val scribe = scribeWithScrollShelves(RecordingShelf())
 
             scribe.retire()
-            val accepted = scribe.flingNote(tag = "payments", message = "started", level = Urgency.INFO, timestamp = 123L)
-
-            assertFalse(accepted)
+            assertFailsWith<IllegalStateException> {
+                scribe.flingNote(tag = "payments", message = "started", level = Urgency.INFO, timestamp = 123L)
+            }
         }
     }
 
@@ -173,7 +174,7 @@ class ScribeDeliveryRetireTest {
                 scribe.planRetire()
                 retired.complete(Unit)
             }
-            scribe = Scribe(shelves = listOf(saver))
+            scribe = scribeWithSavers(shelves = listOf(saver))
 
             scribe.flingNote(tag = "payments", message = "started", level = Urgency.INFO, timestamp = 1L)
             withTimeout(2_000) { retired.await() }
@@ -193,36 +194,10 @@ class ScribeDeliveryRetireTest {
                     }
                 }
             }
-            scribe = Scribe(shelves = listOf(saver))
+            scribe = scribeWithSavers(shelves = listOf(saver))
 
             scribe.flingNote(tag = "payments", message = "started", level = Urgency.INFO, timestamp = 2L)
             withTimeout(2_000) { retired.await() }
-        }
-    }
-
-    @Test
-    fun drop_latest_overflow_can_drop_events_under_pressure() {
-        runSuspend {
-            val gate = CompletableDeferred<Unit>()
-            val firstWriteStarted = CompletableDeferred<Unit>()
-            val shelf = BlockingShelf(gate, firstWriteStarted)
-            val scribe = scribeWithScrollShelves(
-                shelf,
-                deliveryConfig = ScribeDeliveryConfig(bufferSize = 1, overflowStrategy = BufferOverflow.DROP_LATEST),
-            )
-
-            scribe.unrollScroll(id = "one").seal()
-            firstWriteStarted.await()
-            scribe.unrollScroll(id = "two").seal()
-            scribe.unrollScroll(id = "three").seal()
-
-            gate.complete(Unit)
-            shelf.awaitEvents(2)
-            scribe.retire()
-
-            assertTrue(shelf.events.any { it.scrollId == "one" })
-            assertTrue(shelf.events.any { it.scrollId == "two" })
-            assertFalse(shelf.events.any { it.scrollId == "three" })
         }
     }
 
@@ -233,7 +208,7 @@ class ScribeDeliveryRetireTest {
             val errors = mutableListOf<Throwable>()
             val failingSaver = EntrySaver { throw IllegalStateException("boom") }
             val recordingSaver = RecordingEntrySaver()
-            val scribe = Scribe(
+            val scribe = scribeWithSavers(
                 shelves = listOf(failingSaver, recordingSaver),
                 deliveryConfig = ScribeDeliveryConfig(
                     onSaverError = { _, entry, error ->

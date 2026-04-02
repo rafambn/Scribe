@@ -19,11 +19,12 @@ kotlin {
 The smallest setup is a single saver. A `NoteSaver` only receives `Note` events:
 
 ```kotlin
-val scribe = Scribe(
+Scribe.init(
     shelf = NoteSaver { note ->
         println("[${note.level}] ${note.tag}: ${note.message}")
     }
 )
+Scribe.hire()
 ```
 
 ## Emit a Single Event
@@ -31,7 +32,7 @@ val scribe = Scribe(
 Use `note(...)` when you can suspend and want delivery through the internal queue:
 
 ```kotlin
-scribe.note(
+Scribe.note(
     tag = "payments",
     message = "starting checkout",
     level = Urgency.INFO,
@@ -41,7 +42,7 @@ scribe.note(
 If you need best-effort fire-and-forget behavior, use `flingNote(...)`:
 
 ```kotlin
-val accepted = scribe.flingNote(
+val accepted = Scribe.flingNote(
     tag = "payments",
     message = "checkout queued",
     level = Urgency.DEBUG,
@@ -63,7 +64,7 @@ With the saver above, the log output looks like this:
 `Scroll` is for multi-step operations where context accumulates before a final result is emitted.
 
 ```kotlin
-val scribe = Scribe(
+Scribe.init(
     shelf = ScrollSaver { scroll ->
         println(scroll)
     },
@@ -72,8 +73,9 @@ val scribe = Scribe(
         "environment" to JsonPrimitive("production"),
     )
 )
+Scribe.hire()
 
-val scroll = scribe.unrollScroll(id = "checkout-42")
+val scroll = Scribe.unrollScroll(id = "checkout-42")
 scroll.writeString("gateway", "stripe")
 scroll.writeNumber("attempt", 1)
 scroll.writeBoolean("retry", false)

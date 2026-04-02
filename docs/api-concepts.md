@@ -35,7 +35,7 @@ You can inspect active scrolls with `seekScrolls()` and create a new one with `u
 `Scroll` collects structured fields until it is sealed.
 
 ```kotlin
-val scroll = scribe.unrollScroll("checkout-42")
+val scroll = Scribe.unrollScroll("checkout-42")
 scroll.writeString("gateway", "stripe")
 scroll.writeNumber("attempt", 1)
 scroll.writeBoolean("retry", false)
@@ -71,7 +71,7 @@ val timingMargin = object : Margin {
 ## Delivery Configuration
 
 ```kotlin
-val scribe = Scribe(
+Scribe.init(
     shelf = entrySaver,
     deliveryConfig = ScribeDeliveryConfig(
         bufferSize = 256,
@@ -81,6 +81,7 @@ val scribe = Scribe(
         }
     )
 )
+Scribe.hire()
 ```
 
 ## Event Shapes
@@ -107,11 +108,11 @@ SealedScroll(
 ## Failure Handling
 
 ```kotlin
-val scribe = Scribe(
-    shelf = entrySaver,
+Scribe.init(shelf = entrySaver)
+Scribe.hire(
     onIgnition = { throwable ->
         println("Uncaught exception: ${throwable.message}")
-    }
+    },
 )
 ```
 

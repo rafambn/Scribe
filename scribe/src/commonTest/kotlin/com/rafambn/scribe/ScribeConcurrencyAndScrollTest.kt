@@ -13,10 +13,7 @@ class ScribeConcurrencyAndScrollTest {
     fun note_supports_high_throughput_concurrent_writes() {
         runSuspend {
             val saver = RecordingNoteSaver()
-            val scribe = Scribe(
-                shelves = listOf(saver),
-                deliveryConfig = ScribeDeliveryConfig(bufferSize = 2_000),
-            )
+            val scribe = scribeWithSavers(shelves = listOf(saver))
 
             coroutineScope {
                 repeat(1_000) { index ->

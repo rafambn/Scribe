@@ -5,7 +5,7 @@
 `Scribe` sends entries through an internal `Channel` before invoking savers. This gives you one place to tune buffering and overflow behavior.
 
 ```kotlin
-val scribe = Scribe(
+Scribe.init(
     shelf = EntrySaver { entry ->
         println(entry)
     },
@@ -17,6 +17,7 @@ val scribe = Scribe(
         }
     )
 )
+Scribe.hire()
 ```
 
 ## Suspending vs Best-Effort APIs
@@ -33,13 +34,14 @@ Choose based on backpressure and call-site constraints:
 `imprint` adds fields to every new `Scroll` created by the same `Scribe`.
 
 ```kotlin
-val scribe = Scribe(
+Scribe.init(
     shelf = ScrollSaver { println(it) },
     imprint = mapOf(
         "app" to JsonPrimitive("checkout"),
         "region" to JsonPrimitive("us-east-1"),
     )
 )
+Scribe.hire()
 ```
 
 These values become part of the sealed scroll `context`.
@@ -59,10 +61,11 @@ val timingMargin = object : Margin {
     }
 }
 
-val scribe = Scribe(
+Scribe.init(
     shelf = ScrollSaver { println(it) },
     margins = timingMargin,
 )
+Scribe.hire()
 ```
 
 ## Graceful Shutdown
@@ -79,10 +82,12 @@ Use `planRetire()` when shutdown correctness matters more than speed.
 Pass `onIgnition` to install the platform uncaught exception hook:
 
 ```kotlin
-val scribe = Scribe(
+Scribe.init(
     shelf = EntrySaver { println(it) },
+)
+Scribe.hire(
     onIgnition = { throwable ->
         println("Uncaught exception: ${throwable.message}")
-    }
+    },
 )
 ```
