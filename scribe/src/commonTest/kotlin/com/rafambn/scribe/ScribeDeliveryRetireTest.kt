@@ -5,6 +5,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.channels.BufferOverflow
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -63,7 +64,7 @@ class ScribeDeliveryRetireTest {
             val shelf = BlockingShelf(gate)
             val scribe = scribeWithScrollShelves(
                 shelf,
-                deliveryConfig = ScribeDeliveryConfig(bufferSize = 4, overflowStrategy = BufferOverflow.DROP_OLDEST),
+                channel = Channel(capacity = 4, onBufferOverflow = BufferOverflow.DROP_OLDEST),
             )
 
             scribe.unrollScroll(id = "slow").seal()
@@ -213,12 +214,10 @@ class ScribeDeliveryRetireTest {
             val recordingSaver = RecordingEntrySaver()
             val scribe = scribeWithSavers(
                 shelves = listOf(failingSaver, recordingSaver),
-                deliveryConfig = ScribeDeliveryConfig(
-                    onSaverError = { _, entry, error ->
-                        events += entry
-                        errors += error
-                    },
-                ),
+                onSaver = { _, entry, error ->
+                    events += entry
+                    errors += error
+                },
             )
 
             scribe.note(tag = "payments", message = "started", level = Urgency.INFO, timestamp = 42L)

@@ -47,19 +47,15 @@ object Scribe {
      */
     fun hire(
         scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Default),
-        deliveryConfig: ScribeDeliveryConfig = ScribeDeliveryConfig(),
+        channel: Channel<Entry>,
+        onSaver: ((saver: Saver<*>, entry: Entry, error: Throwable) -> Unit)? = null,
     ) {
         val cfg = requireConfig()
-        check(activeQueue == null) { "Scribe runtime is already active. Call retire() or planRetire() first." }
+        check(activeQueue == null) { "Scribe runtime is already active. Call retire() first." }
         check(processorJob?.isActive != true) { "Scribe is still retiring. Wait for pending delivery to finish." }
-        require(deliveryConfig.bufferSize >= -2) { "BufferSize must be >= -2. Check Channel documentation" }
-        val queue = Channel<Entry>(
-            capacity = deliveryConfig.bufferSize,
-            onBufferOverflow = deliveryConfig.overflowStrategy,
-        )
-        activeQueue = queue
+        activeQueue = channel
         val createdProcessor = scope.launch {
-            for (entry in queue) {
+            for (entry in channel) {
                 cfg.shelves.forEach { saver ->
                     try {
                         when (saver) {
@@ -68,15 +64,14 @@ object Scribe {
                             is NoteSaver if entry is Note -> saver.write(entry)
                         }
                     } catch (e: Throwable) {
-                        deliveryConfig.onSaverError(saver, entry, e)
+                        onSaver?.invoke(saver, entry, e)
                     }
                 }
             }
         }
         processorJob = createdProcessor
-        // TODO: log the cancellation cause once internal logging is added to the library.
         createdProcessor.invokeOnCompletion {
-            queue.close()
+            channel.close()
             if (processorJob === createdProcessor) {
                 processorJob = null
             }

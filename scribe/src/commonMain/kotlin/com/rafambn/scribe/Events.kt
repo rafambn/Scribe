@@ -1,6 +1,4 @@
 package com.rafambn.scribe
-
-import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonElement
 
@@ -42,12 +40,3 @@ enum class Urgency {
     WARN,
     ERROR
 }
-
-/**
- * Controls delivery buffering and sink error handling for [Scribe].
- */
-data class ScribeDeliveryConfig(
-    val bufferSize: Int = 256,
-    val overflowStrategy: BufferOverflow = BufferOverflow.DROP_OLDEST,
-    val onSaverError: (saver: Saver<*>, entry: Entry, error: Throwable) -> Unit = { _, _, _ -> },
-)

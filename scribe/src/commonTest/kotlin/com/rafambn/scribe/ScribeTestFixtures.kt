@@ -1,6 +1,7 @@
 package com.rafambn.scribe
 
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.Serializable
@@ -58,29 +59,31 @@ private fun ensureScribeInitialized() {
 internal fun scribeWithScrollShelves(
     vararg shelves: ScrollSaver,
     imprint: Map<String, JsonElement> = emptyMap(),
-    deliveryConfig: ScribeDeliveryConfig = ScribeDeliveryConfig(),
+    channel: Channel<Entry> = Channel(capacity = 256, onBufferOverflow = BufferOverflow.DROP_OLDEST),
+    onSaver: (saver: Saver<*>, entry: Entry, error: Throwable) -> Unit = { _, _, _ -> },
     margins: Margin? = null,
 ): Scribe {
     ensureScribeInitialized()
     runBlocking { Scribe.retire() }
     activeDelegatedSavers = shelves.toList()
     activeMargin = margins
-    onSaverErrorCallback = deliveryConfig.onSaverError
-    Scribe.hire(deliveryConfig = deliveryConfig)
+    onSaverErrorCallback = onSaver
+    Scribe.hire(channel = channel, onSaver = onSaver)
     return Scribe
 }
 
 internal fun scribeWithSavers(
     shelves: List<Saver<*>>,
     margins: Margin? = null,
-    deliveryConfig: ScribeDeliveryConfig = ScribeDeliveryConfig(),
+    channel: Channel<Entry> = Channel(capacity = 256, onBufferOverflow = BufferOverflow.DROP_OLDEST),
+    onSaver: (saver: Saver<*>, entry: Entry, error: Throwable) -> Unit = { _, _, _ -> },
 ): Scribe {
     ensureScribeInitialized()
     runBlocking { Scribe.retire() }
     activeDelegatedSavers = shelves
     activeMargin = margins
-    onSaverErrorCallback = deliveryConfig.onSaverError
-    Scribe.hire(deliveryConfig = deliveryConfig)
+    onSaverErrorCallback = onSaver
+    Scribe.hire(channel = channel, onSaver = onSaver)
     return Scribe
 }
 
