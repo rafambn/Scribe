@@ -1,0 +1,16 @@
+product:
+  type: lib
+  platforms: [jvm, android, iosSimulatorArm64, iosArm64, iosX64]
+
+apply:
+  - ../compose.module-template.yaml
+
+dependencies:
+  - $compose.foundation: exported
+  - $compose.material3: exported
+  - com.rafambn:scribe:0.1.0
+  - org.jetbrains.kotlinx:kotlinx-datetime:0.7.1
+
+settings:
+  kotlin:
+    serialization: json

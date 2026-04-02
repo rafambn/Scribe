@@ -8,67 +8,55 @@ import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonPrimitive
 
 /**
- * Central event writer that creates [Scroll]s and dispatches [Entry] objects to configured savers.
- *
- * @param shelves sinks that receive emitted entries.
- * @param imprint immutable key/value context copied into each created scroll.
- * @param deliveryConfig buffering, overflow, and saver error-handling settings.
- * @param margins optional hooks called on scroll start and seal.
- * @param scope coroutine scope used to run the internal delivery processor.
- * @param onIgnition optional uncaught-exception callback installed globally per platform.
+ * Process-wide event writer that creates [Scroll]s and dispatches [Entry] objects to configured savers.
  */
-class Scribe(
-    private val shelves: List<Saver<*>>,
-    private val imprint: Map<String, JsonElement> = emptyMap(),
-    private val deliveryConfig: ScribeDeliveryConfig = ScribeDeliveryConfig(),
-    private val margins: Margin? = null,
-    scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Default),
-    onIgnition: ((Throwable) -> Unit)? = null,
-) {
-    private val scrollsById = mutableMapOf<String, Scroll>()
-    internal val queue = Channel<Entry>(
-        capacity = deliveryConfig.bufferSize,
-        onBufferOverflow = deliveryConfig.overflowStrategy,
-    )
-    private val processorJob: Job
+object Scribe {
+    class Inscribe {
+        var shelves: List<Saver<*>> = emptyList()
+        var imprint: Map<String, JsonElement> = emptyMap()
+        var margins: Margin? = null
+        var onIgnition: ((Throwable) -> Unit)? = null
+    }
+
+    internal var config: Inscribe? = null
+    private var activeQueue: Channel<Entry>? = null
+    private var processorJob: Job? = null
 
     /**
-     * Convenience constructor for a single saver.
+     * Initializes the singleton with immutable parameters.
      *
-     * @param shelf sink that receives emitted entries.
-     * @param imprint immutable key/value context copied into each created scroll.
-     * @param deliveryConfig buffering, overflow, and saver error-handling settings.
-     * @param margins optional hooks called on scroll start and seal.
-     * @param scope coroutine scope used to run the internal delivery processor.
-     * @param onIgnition optional uncaught-exception callback installed globally per platform.
+     * This function can be called only once per process lifetime.
      */
-    constructor(
-        shelf: Saver<*>,
-        imprint: Map<String, JsonElement> = emptyMap(),
-        deliveryConfig: ScribeDeliveryConfig = ScribeDeliveryConfig(),
-        margins: Margin? = null,
-        scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Default),
-        onIgnition: ((Throwable) -> Unit)? = null,
-    ) : this(
-        shelves = listOf(shelf),
-        imprint = imprint,
-        deliveryConfig = deliveryConfig,
-        margins = margins,
-        scope = scope,
-        onIgnition = onIgnition,
-    )
-
-    init {
-        require(deliveryConfig.bufferSize >= -2) { "BufferSize must be >= -2. Check Channel documentation" }
-        require(shelves.isNotEmpty()) { "At least one shelf is required." }
+    fun inscribe(block: Inscribe.() -> Unit) {
+        check(config == null) { "Scribe is already initialized and cannot be initialized again." }
+        val dsl = Inscribe().apply(block)
+        val configuredShelves = dsl.shelves
+        require(configuredShelves.isNotEmpty()) { "At least one shelf is required." }
+        val onIgnition = dsl.onIgnition
         if (onIgnition != null) {
             installUncaughtExceptionHandler(onIgnition)
         }
-        processorJob = scope.launch {
-            for (entry in queue) {
-                shelves.forEach { saver ->
+        config = dsl
+    }
+
+    /**
+     * Starts the delivery runtime using previously initialized parameters.
+     */
+    fun hire(
+        scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Default),
+        channel: Channel<Entry>,
+        onSaver: ((saver: Saver<*>, entry: Entry, error: Throwable) -> Unit)? = null,
+    ) {
+        val cfg = requireConfig()
+        check(activeQueue == null) { "Scribe runtime is already active. Call retire() first." }
+        check(processorJob?.isActive != true) { "Scribe is still retiring. Wait for pending delivery to finish." }
+        activeQueue = channel
+        val createdProcessor = scope.launch {
+            for (entry in channel) {
+                cfg.shelves.forEach { saver ->
                     try {
                         when (saver) {
                             is EntrySaver -> saver.write(entry)
@@ -76,70 +64,51 @@ class Scribe(
                             is NoteSaver if entry is Note -> saver.write(entry)
                         }
                     } catch (e: Throwable) {
-                        deliveryConfig.onSaverError(saver, entry, e)
+                        onSaver?.invoke(saver, entry, e)
                     }
                 }
             }
         }
-        // TODO: log the cancellation cause once internal logging is added to the library.
-        processorJob.invokeOnCompletion { queue.close() }
+        processorJob = createdProcessor
+        createdProcessor.invokeOnCompletion {
+            channel.close()
+            if (processorJob === createdProcessor) {
+                processorJob = null
+            }
+        }
     }
-
-    /**
-     * Returns all currently created scrolls.
-     */
-    fun seekScrolls(): List<Scroll> = scrollsById.values.toList()
 
     /**
      * Creates a new scroll, optionally with a custom unique [id].
      *
      * @param id optional custom scroll id. When null, a unique id is generated.
      */
-    fun unrollScroll(id: String? = null): Scroll {
-        val resolvedId = when {
-            id == null -> {
-                var generatedId = newScrollId()
-                while (scrollsById.containsKey(generatedId)) {
-                    generatedId = newScrollId()
-                }
-                generatedId
-            }
-
-            scrollsById.containsKey(id) -> {
-                throw IllegalArgumentException("A scroll with id '$id' already exists.")
-            }
-
-            else -> id
+    fun newScroll(id: String? = null): Scroll {
+        val cfg = requireConfig()
+        val resolvedId = id ?: newScrollId()
+        val scroll: Scroll = mutableMapOf()
+        scroll["scroll_id"] = JsonPrimitive(resolvedId)
+        cfg.imprint.forEach { (key, value) ->
+            scroll[key] = value
         }
-
-        val scroll = Scroll(
-            id = resolvedId,
-            imprint = imprint.toMap(),
-            onSeal = { margins?.footer(it) },
-            onSealed = { scrollsById.remove(it.id) },
-            emitSealedScroll = { queue.send(it) },
-            tryEmitSealedScroll = { queue.trySend(it) },
-        )
-        margins?.header(scroll)
-        scrollsById[resolvedId] = scroll
+        cfg.margins?.header(scroll)
         return scroll
-    }
-
-    /**
-     * Stops accepting new entries without waiting for pending delivery.
-     */
-    fun retire() {
-        queue.close()
     }
 
     /**
      * Stops accepting entries and waits for queued events to finish delivery.
      */
-    suspend fun planRetire() {
+    suspend fun retire() {
+        val queue = activeQueue ?: return
+        val runningProcessor = processorJob
         queue.close()
+        activeQueue = null
         val callerJob = currentCoroutineContext()[Job]
-        if (!isProcessorFamily(callerJob)) {
-            processorJob.join()
+        if (runningProcessor != null && !isProcessorFamily(runningProcessor, callerJob)) {
+            runningProcessor.join()
+            if (processorJob === runningProcessor) {
+                processorJob = null
+            }
         }
     }
 
@@ -152,7 +121,7 @@ class Scribe(
      * @param timestamp epoch milliseconds associated with the note.
      */
     suspend fun note(tag: String, message: String, level: Urgency = Urgency.INFO, timestamp: Long = nowEpochMs()) {
-        queue.send(
+        requireActiveQueue().send(
             Note(
                 tag = tag,
                 message = message,
@@ -162,31 +131,21 @@ class Scribe(
         )
     }
 
-    // TODO: review silent-drop behavior after retire() — trySend result is intentionally ignored
-    //       (best-effort semantics), but callers have no signal that the entry was discarded.
-    /**
-     * Emits a [Note] using non-blocking best-effort enqueue.
-     *
-     * @param tag logical source/category for the note.
-     * @param message note text payload.
-     * @param level severity level for the note.
-     * @param timestamp epoch milliseconds associated with the note.
-     */
-    fun flingNote(tag: String, message: String, level: Urgency = Urgency.INFO, timestamp: Long = nowEpochMs()) {
-        queue.trySend(
-            Note(
-                tag = tag,
-                message = message,
-                level = level,
-                timestamp = timestamp,
-            ),
-        )
+    private fun requireConfig(): Inscribe =
+        config ?: throw IllegalStateException("Scribe is not initialized. Call Scribe.inscribe(...) first.")
+
+    private fun requireActiveQueue(): Channel<Entry> {
+        return activeQueue ?: throw IllegalStateException("Scribe runtime is not active. Call Scribe.hire(...) first.")
     }
 
-    private fun isProcessorFamily(job: Job?): Boolean {
-        if (job == null) return false
-        if (job === processorJob) return true
-        return containsDescendant(processorJob, job)
+    internal suspend fun enqueue(entry: Entry) {
+        requireActiveQueue().send(entry)
+    }
+
+    private fun isProcessorFamily(root: Job, target: Job?): Boolean {
+        if (target == null) return false
+        if (target === root) return true
+        return containsDescendant(root, target)
     }
 
     private fun containsDescendant(root: Job, target: Job): Boolean {

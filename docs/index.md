@@ -38,3 +38,4 @@ That pushes logging toward "what happened to this request or workflow?" instead 
 - [Getting Started](getting-started.md) for setup and first usage
 - [API Concepts](api-concepts.md) for terminology and data model
 - [Lifecycle and Delivery](lifecycle-and-delivery.md) for buffering, margins, and shutdown
+- [OpenObserve Showcase](openobserve-showcase.md) for the runnable demo app and local observability stack
