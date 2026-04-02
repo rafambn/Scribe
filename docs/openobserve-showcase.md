@@ -1,23 +1,21 @@
 # OpenObserve Showcase
 
-The `testApp` module is the practical demo for Scribe. It turns the library API into a guided UI and ships a local OpenObserve setup under `testApp/openobserve/` so you can see Scribe events land in a real observability tool.
+The `testApp` module is the practical demo for Scribe. It turns the current library API into a guided UI and ships a local OpenObserve setup under `testApp/openobserve/` so you can see events land in a real observability tool.
 
 ## What The Showcase Demonstrates
 
 The app covers the current public runtime features of Scribe:
 
 - `note(...)`
-- `flingNote(...)`
-- `newScroll(...)`
-- generated and custom scroll IDs
-- `writeString`, `writeNumber`, `writeBoolean`, `writeSerializable`
-- `read(...)`, `erase(...)`, `seekScrolls()`
-- `seal(...)`, `looseSeal(...)`
+- `newScroll(...)` with generated and custom IDs
+- direct `Scroll` map writes (`scroll["field"] = ...`)
+- map read/remove operations
+- `seal(...)` with success and error outcomes
 - `Margin`
-- `NoteSaver`, `ScrollSaver`, `EntrySaver`
-- `ScribeDeliveryConfig`
-- `onSaverError`
-- `retire()` and `planRetire()`
+- `EntrySaver`
+- channel overflow behavior via `Channel(..., onBufferOverflow = DROP_OLDEST)`
+- saver error callback through `hire(onSaver = ... )`
+- `retire()` and runtime re-hire
 - safe `onIgnition` wiring
 
 ## Single Stream Design
@@ -33,7 +31,7 @@ That stream intentionally allows sparse fields. Every uploaded record includes:
 - `saver_type`
 
 Notes then contribute fields such as `tag`, `message`, `level`, and `note_timestamp`.
-Scrolls contribute `scroll_id`, `success`, `error_message`, `context`, and `data`.
+Scrolls contribute `scroll_id`, `success`, `error_message`, and fields from `SealedScroll.data`.
 
 The single-stream design makes it easy to search everything in one place while still filtering by `event_kind`.
 
@@ -77,14 +75,14 @@ or:
 ## Suggested Experiments
 
 1. Run `Checkout flow` and inspect the wide-event payload in `scribe_demo`.
-2. Run `Read/erase/seek` to see custom scroll IDs and scroll mutation helpers in action.
-3. Run `Margins + looseSeal` and verify the timing fields in the uploaded scroll.
-4. Run `JSON object serialization` to validate how nested payload fields appear in OpenObserve.
-5. Run `String template message` to inspect how interpolated text is rendered in the `message` field.
+2. Run `Map read/remove` to inspect map mutation behavior before sealing.
+3. Run `Margins + seal(error)` and verify timing fields plus `success = false`.
+4. Run `JSON object serialization` to validate nested payload fields in OpenObserve.
+5. Run `String template message` to inspect message rendering in the `message` field.
 6. Run `EntrySaver mixed flow` to send a note and a scroll through one saver path.
-7. Run `Overflow demo` and confirm that not every emitted event survives the configured buffer policy.
-8. Run `Saver failure demo` and observe that `onSaverError` reports the failure while the next saver still uploads the record.
-9. Compare `retire()` with `planRetire()` by running both shutdown demos and inspecting the in-app timeline.
+7. Run `Overflow demo` and confirm a burst can be trimmed by `DROP_OLDEST` under pressure.
+8. Run `Saver failure demo` and observe that `onSaver` reports the injected failure while delivery continues.
+9. Compare `retire() (light queue)` with `retire() with backlog` in the in-app timeline.
 
 ## Querying In OpenObserve
 
@@ -114,4 +112,4 @@ UI checks that matter:
 - Widen the time picker if the stream looks empty after a successful upload
 - Filter by `event_kind` or `demo_name` first, because the single-stream demo intentionally has sparse fields
 
-For setup details and the exact run commands, see `testApp/README.md` in the repository root.
+For setup details and exact run commands, see `testApp/README.md` in the repository root.

@@ -68,20 +68,20 @@ fun Screen() {
                 StatusCard(state, controller)
                 ActionGroup(
                     title = "Notes",
-                    description = "Standalone events through note(...) and flingNote(...).",
+                    description = "Standalone events through the suspending note(...) API.",
                     buttons = listOf(
                         "Run note(...)" to controller::runNoteScenario,
-                        "Run flingNote(...)" to controller::runFlingNoteScenario,
+                        "Run second note(...)" to controller::runFlingNoteScenario,
                     ),
                     enabled = !state.isBusy,
                 )
                 ActionGroup(
                     title = "Scrolls",
-                    description = "Wide-event flows with generated IDs, custom IDs, mutation helpers, and margins.",
+                    description = "Wide-event flows with generated/custom IDs, direct map writes, and margins.",
                     buttons = listOf(
                         "Checkout flow" to controller::runCheckoutScenario,
-                        "Read/erase/seek" to controller::runInspectionScenario,
-                        "Margins + looseSeal" to controller::runMarginScenario,
+                        "Map read/remove" to controller::runInspectionScenario,
+                        "Margins + seal(error)" to controller::runMarginScenario,
                     ),
                     enabled = !state.isBusy,
                 )
@@ -106,11 +106,11 @@ fun Screen() {
                 )
                 ActionGroup(
                     title = "Shutdown And Safety",
-                    description = "Compare retire() with planRetire() and wire the onIgnition callback safely.",
+                    description = "Use retire() shutdown flows and wire the onIgnition callback safely.",
                     buttons = listOf(
                         "Recreate Scribe" to controller::recreateMainScribe,
-                        "retire()" to controller::runRetireScenario,
-                        "planRetire()" to controller::runPlanRetireScenario,
+                        "retire() (light queue)" to controller::runRetireScenario,
+                        "retire() with backlog" to controller::runPlanRetireScenario,
                         "Wire onIgnition" to controller::wireIgnitionScenario,
                     ),
                     enabled = !state.isBusy,

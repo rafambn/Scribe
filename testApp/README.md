@@ -1,20 +1,19 @@
 # testApp Scribe Showcase
 
-This app is a guided demo for the published `com.rafambn:scribe:0.1.0` library. It runs on JVM desktop and Android, uploads demo records into a local OpenObserve instance, and is designed to showcase the full runtime feature set of Scribe without requiring any backend outside this folder.
+This app is a guided demo for the current Scribe API in this repository. It runs on JVM desktop and Android, uploads demo records into a local OpenObserve instance, and showcases runtime behavior end-to-end without requiring any backend outside this folder.
 
 ## What This Demo Covers
 
 - `note(...)`
-- `flingNote(...)`
 - `newScroll(...)` with generated and custom IDs
-- `writeString`, `writeNumber`, `writeBoolean`, `writeSerializable`
-- `read(...)`, `erase(...)`, `seekScrolls()`
-- `seal(...)`, `looseSeal(...)`
+- direct map writes on `Scroll` (`scroll["field"] = ...`)
+- map reads/removals before sealing
+- `seal(...)` with success and failure outcomes
 - `Margin.header(...)`, `Margin.footer(...)`
-- `NoteSaver`, `ScrollSaver`, `EntrySaver`
-- `ScribeDeliveryConfig` buffer overflow behavior
-- `onSaverError`
-- `retire()` and `planRetire()`
+- `EntrySaver`
+- channel overflow behavior via `Channel(..., onBufferOverflow = DROP_OLDEST)`
+- saver failure callback through `hire(onSaver = ... )`
+- `retire()` and runtime re-hire
 - `onIgnition` wiring, documented safely without crashing the app
 
 All uploaded records go into one OpenObserve stream named `scribe_demo`. Sparse fields are intentional. Every record includes `event_kind` so you can query notes and scrolls separately inside the same stream.
@@ -74,17 +73,17 @@ From `testApp/`:
 The UI contains grouped demo actions:
 
 - `Run note(...)`
-- `Run flingNote(...)`
+- `Run second note(...)`
 - `Checkout flow`
-- `Read/erase/seek`
-- `Margins + looseSeal`
+- `Map read/remove`
+- `Margins + seal(error)`
 - `JSON object serialization`
 - `String template message`
 - `EntrySaver mixed flow`
 - `Overflow demo`
 - `Saver failure demo`
-- `retire()`
-- `planRetire()`
+- `retire() (light queue)`
+- `retire() with backlog`
 - `Wire onIgnition`
 
 Each action updates the in-app timeline and attempts an upload to OpenObserve.
@@ -135,8 +134,7 @@ Fields you will see often:
 - `saver_type`
 - `tag`, `message`, `level`
 - `scroll_id`, `success`, `error_message`
-- `context`
-- `data`
+- scroll data fields such as `gateway`, `order_id`, `order_snapshot`, `elapsed_ms`
 
 Useful first checks if uploads returned HTTP 200 but you do not see data:
 

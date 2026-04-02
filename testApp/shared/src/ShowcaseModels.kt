@@ -9,7 +9,6 @@ import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonPrimitive
-import kotlinx.serialization.json.longOrNull
 
 enum class ConnectionState {
     IDLE,
@@ -94,16 +93,12 @@ fun payloadFromEntry(
             payload["platform"] = JsonPrimitive(platform)
             payload["app_version"] = JsonPrimitive(appVersion)
             payload["saver_type"] = JsonPrimitive(saverType)
-            payload["scroll_id"] = JsonPrimitive(entry.scrollId)
+            payload["scroll_id"] = JsonPrimitive(stringField(entry.data, "scroll_id") ?: "missing-scroll-id")
             payload["success"] = JsonPrimitive(entry.success)
             entry.errorMessage?.let { payload["error_message"] = JsonPrimitive(it) }
             stringField(entry.data, "message")?.let { payload["message"] = JsonPrimitive(it) }
-            longField(entry.data, "order_id")?.let { payload["order_id"] = JsonPrimitive(it) }
-                ?: longField(entry.data, "ordemId")?.let { payload["order_id"] = JsonPrimitive(it) }
-
-            entry.context.forEach { (key, value) ->
-                payload.putIfAbsent(key, value)
-            }
+            entry.data["order_id"]?.let { payload["order_id"] = it }
+                ?: entry.data["ordemId"]?.let { payload["order_id"] = it }
             entry.data.forEach { (key, value) ->
                 payload.putIfAbsent(key, value)
             }
@@ -113,9 +108,6 @@ fun payloadFromEntry(
 
 private fun stringField(data: Map<String, JsonElement>, key: String): String? =
     data[key]?.jsonPrimitive?.contentOrNull
-
-private fun longField(data: Map<String, JsonElement>, key: String): Long? =
-    data[key]?.jsonPrimitive?.longOrNull
 
 data class TimelineItem(
     val title: String,

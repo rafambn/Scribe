@@ -2,7 +2,7 @@
 
 ## Delivery Pipeline
 
-`Scribe` sends entries through an internal `Channel` before invoking savers. This gives you one place to tune buffering and overflow behavior.
+`Scribe` delivers entries through the `Channel<Entry>` you provide to `hire(...)`.
 
 ```kotlin
 Scribe.inscribe {
@@ -10,25 +10,26 @@ Scribe.inscribe {
         println(entry)
     })
 }
+
 Scribe.hire(
-    deliveryConfig = ScribeDeliveryConfig(
-        bufferSize = 256,
-        overflowStrategy = BufferOverflow.DROP_OLDEST,
-        onSaverError = { saver, entry, error ->
-            println("Saver $saver failed for $entry: ${error.message}")
-        }
+    channel = Channel(
+        capacity = 256,
+        onBufferOverflow = BufferOverflow.DROP_OLDEST,
     ),
+    onSaver = { saver, entry, error ->
+        println("Saver $saver failed for $entry: ${error.message}")
+    },
 )
 ```
 
-## Suspending vs Best-Effort APIs
+## Emission APIs
 
-Choose based on backpressure and call-site constraints:
+Current emission calls are suspending:
 
-- `note(...)` suspends while sending to the queue
-- `flingNote(...)` is best-effort, does not suspend, and returns `false` when the queue rejects the entry
-- `seal(...)` suspends before dispatching the final `SealedScroll`
-- `looseSeal(...)` is best-effort and does not suspend
+- `note(...)` sends a `Note`
+- `seal(...)` sends a `SealedScroll`
+
+There are no separate best-effort APIs in this runtime shape.
 
 ## Shared Context with `imprint`
 
@@ -42,10 +43,11 @@ Scribe.inscribe {
         "region" to JsonPrimitive("us-east-1"),
     )
 }
-Scribe.hire()
+
+Scribe.hire(channel = Channel(capacity = 256))
 ```
 
-These values become part of the sealed scroll `context`.
+These values are inserted into the scroll map and then appear in `SealedScroll.data`.
 
 ## Open and Close Hooks with `Margin`
 
@@ -54,11 +56,11 @@ Use `Margin` when scrolls need standard fields at creation and sealing time.
 ```kotlin
 val timingMargin = object : Margin {
     override fun header(scroll: Scroll) {
-        scroll.writeNumber("startedAtEpochMs", 1000L)
+        scroll["started_at"] = JsonPrimitive(1000)
     }
 
     override fun footer(scroll: Scroll) {
-        scroll.writeNumber("sealedAtEpochMs", 2000L)
+        scroll["sealed_at"] = JsonPrimitive(2000)
     }
 }
 
@@ -66,17 +68,19 @@ Scribe.inscribe {
     shelves = listOf(ScrollSaver { println(it) })
     margins = timingMargin
 }
-Scribe.hire()
+
+Scribe.hire(channel = Channel(capacity = 256))
 ```
 
 ## Graceful Shutdown
 
-There are two shutdown modes:
+Use `retire()` to stop intake and wait until queued delivery work is finished.
 
-- `retire()` closes the queue immediately
-- `planRetire()` closes the queue and waits for queued work to finish
+```kotlin
+Scribe.retire()
+```
 
-Use `planRetire()` when shutdown correctness matters more than speed.
+After `retire()`, you can call `hire(...)` again (with a new channel) to restart runtime delivery.
 
 ## Uncaught Exceptions
 
@@ -89,5 +93,6 @@ Scribe.inscribe {
         println("Uncaught exception: ${throwable.message}")
     }
 }
-Scribe.hire()
 ```
+
+Saver-level failures are handled separately by `onSaver` passed to `hire(...)`.
