@@ -121,7 +121,6 @@ object Scribe {
             onSeal = { cfg.margins?.footer(it) },
             onSealed = { scrollsById.remove(it.id) },
             emitSealedScroll = { queue.send(it) },
-            tryEmitSealedScroll = { queue.trySend(it) },
         )
         cfg.margins?.header(scroll)
         scrollsById[resolvedId] = scroll
@@ -129,17 +128,9 @@ object Scribe {
     }
 
     /**
-     * Stops accepting new entries without waiting for pending delivery.
-     */
-    fun retire() {
-        activeQueue?.close()
-        clearActiveRuntime()
-    }
-
-    /**
      * Stops accepting entries and waits for queued events to finish delivery.
      */
-    suspend fun planRetire() {
+    suspend fun retire() {
         val queue = activeQueue ?: return
         val runningProcessor = processorJob
         queue.close()
@@ -170,32 +161,6 @@ object Scribe {
                 timestamp = timestamp,
             ),
         )
-    }
-
-    /**
-     * Emits a [Note] using non-blocking best-effort enqueue.
-     *
-     * @param tag logical source/category for the note.
-     * @param message note text payload.
-     * @param level severity level for the note.
-     * @param timestamp epoch milliseconds associated with the note.
-     *
-     * @return `true` when the note was accepted by the queue, `false` when it was rejected.
-     */
-    fun flingNote(
-        tag: String,
-        message: String,
-        level: Urgency = Urgency.INFO,
-        timestamp: Long = nowEpochMs(),
-    ): Boolean {
-        return requireActiveQueue().trySend(
-            Note(
-                tag = tag,
-                message = message,
-                level = level,
-                timestamp = timestamp,
-            ),
-        ).isSuccess
     }
 
     private fun clearActiveRuntime() {

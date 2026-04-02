@@ -43,7 +43,7 @@ class ScribeDeliveryRetireTest {
                 shelves = listOf(scrollShelf, noteSaver, allSaver),
             )
 
-            scribe.flingNote(tag = "payments", message = "started", level = Urgency.INFO, timestamp = 100L)
+            scribe.note(tag = "payments", message = "started", level = Urgency.INFO, timestamp = 100L)
             scribe.unrollScroll(id = "scroll-1").seal()
             scrollShelf.awaitEvents(1)
             noteSaver.awaitEvents(1)
@@ -111,7 +111,7 @@ class ScribeDeliveryRetireTest {
     }
 
     @Test
-    fun retire_returns_immediately_without_waiting_for_drain() {
+    fun retire_waits_for_inflight_delivery() {
         runSuspend {
             val gate = CompletableDeferred<Unit>()
             val firstWriteStarted = CompletableDeferred<Unit>()
@@ -120,29 +120,31 @@ class ScribeDeliveryRetireTest {
 
             scribe.unrollScroll(id = "in-flight").seal()
             firstWriteStarted.await()
-            scribe.retire()
-            assertEquals(0, shelf.events.size)
-
+            val retireScope = CoroutineScope(Dispatchers.Default)
+            val retireJob = retireScope.launch { scribe.retire() }
+            delay(50)
+            assertFalse(retireJob.isCompleted)
             gate.complete(Unit)
-            shelf.awaitEvents(1)
+            withTimeout(2_000) { retireJob.join() }
+            retireScope.cancel()
             assertEquals("in-flight", shelf.events.single().scrollId)
         }
     }
 
     @Test
-    fun flingNote_returns_false_after_retire() {
+    fun note_throws_after_retire() {
         runSuspend {
             val scribe = scribeWithScrollShelves(RecordingShelf())
 
             scribe.retire()
             assertFailsWith<IllegalStateException> {
-                scribe.flingNote(tag = "payments", message = "started", level = Urgency.INFO, timestamp = 123L)
+                scribe.note(tag = "payments", message = "started", level = Urgency.INFO, timestamp = 123L)
             }
         }
     }
 
     @Test
-    fun planRetire_waits_for_pending_events_to_flush() {
+    fun retire_waits_for_pending_events_to_flush() {
         runSuspend {
             val gate = CompletableDeferred<Unit>()
             val firstWriteStarted = CompletableDeferred<Unit>()
@@ -153,7 +155,7 @@ class ScribeDeliveryRetireTest {
             firstWriteStarted.await()
 
             val retireScope = CoroutineScope(Dispatchers.Default)
-            val retireJob = retireScope.launch { scribe.planRetire() }
+            val retireJob = retireScope.launch { scribe.retire() }
             delay(50)
             assertFalse(retireJob.isCompleted)
 
@@ -166,37 +168,37 @@ class ScribeDeliveryRetireTest {
     }
 
     @Test
-    fun planRetire_called_from_saver_does_not_deadlock() {
+    fun retire_called_from_saver_does_not_deadlock() {
         runSuspend {
             val retired = CompletableDeferred<Unit>()
             lateinit var scribe: Scribe
             val saver = EntrySaver {
-                scribe.planRetire()
+                scribe.retire()
                 retired.complete(Unit)
             }
             scribe = scribeWithSavers(shelves = listOf(saver))
 
-            scribe.flingNote(tag = "payments", message = "started", level = Urgency.INFO, timestamp = 1L)
+            scribe.note(tag = "payments", message = "started", level = Urgency.INFO, timestamp = 1L)
             withTimeout(2_000) { retired.await() }
         }
     }
 
     @Test
-    fun planRetire_called_from_saver_child_coroutine_does_not_deadlock() {
+    fun retire_called_from_saver_child_coroutine_does_not_deadlock() {
         runSuspend {
             val retired = CompletableDeferred<Unit>()
             lateinit var scribe: Scribe
             val saver = EntrySaver {
                 coroutineScope {
                     launch {
-                        scribe.planRetire()
+                        scribe.retire()
                         retired.complete(Unit)
                     }
                 }
             }
             scribe = scribeWithSavers(shelves = listOf(saver))
 
-            scribe.flingNote(tag = "payments", message = "started", level = Urgency.INFO, timestamp = 2L)
+            scribe.note(tag = "payments", message = "started", level = Urgency.INFO, timestamp = 2L)
             withTimeout(2_000) { retired.await() }
         }
     }
@@ -218,7 +220,7 @@ class ScribeDeliveryRetireTest {
                 ),
             )
 
-            scribe.flingNote(tag = "payments", message = "started", level = Urgency.INFO, timestamp = 42L)
+            scribe.note(tag = "payments", message = "started", level = Urgency.INFO, timestamp = 42L)
             recordingSaver.awaitEvents(1)
             scribe.retire()
 

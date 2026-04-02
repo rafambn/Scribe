@@ -62,7 +62,7 @@ internal fun scribeWithScrollShelves(
     margins: Margin? = null,
 ): Scribe {
     ensureScribeInitialized()
-    runBlocking { Scribe.planRetire() }
+    runBlocking { Scribe.retire() }
     activeDelegatedSavers = shelves.toList()
     activeMargin = margins
     onSaverErrorCallback = deliveryConfig.onSaverError
@@ -76,7 +76,7 @@ internal fun scribeWithSavers(
     deliveryConfig: ScribeDeliveryConfig = ScribeDeliveryConfig(),
 ): Scribe {
     ensureScribeInitialized()
-    runBlocking { Scribe.planRetire() }
+    runBlocking { Scribe.retire() }
     activeDelegatedSavers = shelves
     activeMargin = margins
     onSaverErrorCallback = deliveryConfig.onSaverError

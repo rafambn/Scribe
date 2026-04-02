@@ -16,7 +16,6 @@ class Scroll internal constructor(
     private val onSeal: (Scroll) -> Unit = {},
     private val onSealed: (Scroll) -> Unit = {},
     private val emitSealedScroll: suspend (SealedScroll) -> Unit = {},
-    private val tryEmitSealedScroll: (SealedScroll) -> Unit = {},
 ) {
     private val sharedContext = imprint.toMap()
     private val _data = mutableMapOf<String, JsonElement>()
@@ -41,22 +40,6 @@ class Scroll internal constructor(
 
         val result = toSealedScroll(success, error)
         emitSealedScroll(result)
-        return result
-    }
-
-    /**
-     * Seals this scroll using non-blocking best-effort enqueue.
-     */
-    fun looseSeal(success: Boolean = true, error: Throwable? = null): SealedScroll {
-        if (sealed) {
-            return toSealedScroll(success, error)
-        }
-        onSeal(this)
-        sealed = true
-        onSealed(this)
-
-        val result = toSealedScroll(success, error)
-        tryEmitSealedScroll(result)
         return result
     }
 
