@@ -55,7 +55,7 @@ kotlin {
 Initialize `Scribe`, hire the runtime, and emit a note:
 
 ```kotlin
-Scribe.init {
+Scribe.inscribe {
     shelves = listOf(
         NoteSaver { note ->
             println("[${note.level}] ${note.tag}: ${note.message}")
@@ -74,7 +74,7 @@ Scribe.note(
 Use a scroll when you need shared context for a longer flow:
 
 ```kotlin
-Scribe.init {
+Scribe.inscribe {
     shelves = listOf(
         ScrollSaver { scroll -> println(scroll) }
     )

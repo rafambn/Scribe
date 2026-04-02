@@ -13,19 +13,14 @@ import kotlinx.serialization.json.JsonElement
  * Process-wide event writer that creates [Scroll]s and dispatches [Entry] objects to configured savers.
  */
 object Scribe {
-    class InitDsl internal constructor() {
+    class Inscribe {
         var shelves: List<Saver<*>> = emptyList()
         var imprint: Map<String, JsonElement> = emptyMap()
         var margins: Margin? = null
+        var onIgnition: ((Throwable) -> Unit)? = null
     }
 
-    private class InitConfig(
-        val shelves: List<Saver<*>>,
-        val imprint: Map<String, JsonElement> = emptyMap(),
-        val margins: Margin? = null,
-    )
-
-    private var config: InitConfig? = null
+    private var config: Inscribe? = null
     private var activeQueue: Channel<Entry>? = null
     private var processorJob: Job? = null
     private val scrollsById = mutableMapOf<String, Scroll>()
@@ -35,16 +30,16 @@ object Scribe {
      *
      * This function can be called only once per process lifetime.
      */
-    fun init(block: InitDsl.() -> Unit) {
+    fun inscribe(block: Inscribe.() -> Unit) {
         check(config == null) { "Scribe is already initialized and cannot be initialized again." }
-        val dsl = InitDsl().apply(block)
+        val dsl = Inscribe().apply(block)
         val configuredShelves = dsl.shelves
         require(configuredShelves.isNotEmpty()) { "At least one shelf is required." }
-        config = InitConfig(
-            shelves = configuredShelves.toList(),
-            imprint = dsl.imprint,
-            margins = dsl.margins,
-        )
+        val onIgnition = dsl.onIgnition
+        if (onIgnition != null) {
+            installUncaughtExceptionHandler(onIgnition)
+        }
+        config = dsl
     }
 
     /**
@@ -53,15 +48,11 @@ object Scribe {
     fun hire(
         scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Default),
         deliveryConfig: ScribeDeliveryConfig = ScribeDeliveryConfig(),
-        onIgnition: ((Throwable) -> Unit)? = null,
     ) {
         val cfg = requireConfig()
         check(activeQueue == null) { "Scribe runtime is already active. Call retire() or planRetire() first." }
         check(processorJob?.isActive != true) { "Scribe is still retiring. Wait for pending delivery to finish." }
         require(deliveryConfig.bufferSize >= -2) { "BufferSize must be >= -2. Check Channel documentation" }
-        if (onIgnition != null) {
-            installUncaughtExceptionHandler(onIgnition)
-        }
         val queue = Channel<Entry>(
             capacity = deliveryConfig.bufferSize,
             onBufferOverflow = deliveryConfig.overflowStrategy,
@@ -212,8 +203,8 @@ object Scribe {
         scrollsById.clear()
     }
 
-    private fun requireConfig(): InitConfig =
-        config ?: throw IllegalStateException("Scribe is not initialized. Call Scribe.init(...) first.")
+    private fun requireConfig(): Inscribe =
+        config ?: throw IllegalStateException("Scribe is not initialized. Call Scribe.inscribe(...) first.")
 
     private fun ensureActive() {
         if (activeQueue == null) {

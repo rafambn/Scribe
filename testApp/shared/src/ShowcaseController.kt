@@ -383,23 +383,22 @@ class ShowcaseController {
     private fun createMainScribe(): Scribe =
         Scribe.also {
             if (!scribeInitialized) {
-                Scribe.init {
+                Scribe.inscribe {
                     shelves = listOf(entryUploadSaver("shared_session", "EntrySaver"))
                     imprint = sampleImprint(platform) + mapOf(
                         "stream" to JsonPrimitive(config.stream),
                         "session_kind" to JsonPrimitive("persistent-demo"),
                     )
                     margins = defaultMargin
+                    onIgnition = { throwable ->
+                        _state.update {
+                            it.copy(ignitionMessage = "onIgnition captured ${throwable.message}")
+                        }
+                    }
                 }
                 scribeInitialized = true
             }
-            Scribe.hire(
-                onIgnition = { throwable ->
-                    _state.update {
-                        it.copy(ignitionMessage = "onIgnition captured ${throwable.message}")
-                    }
-                },
-            )
+            Scribe.hire()
         )
 
     private fun noteUploadSaver(

@@ -47,7 +47,7 @@ private val delegatingEntrySaver = EntrySaver { entry ->
 
 private fun ensureScribeInitialized() {
     if (initialized) return
-    Scribe.init {
+    Scribe.inscribe {
         shelves = listOf(delegatingEntrySaver)
         imprint = defaultTestImprint
         margins = delegatingMargin

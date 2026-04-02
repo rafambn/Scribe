@@ -71,7 +71,7 @@ val timingMargin = object : Margin {
 ## Delivery Configuration
 
 ```kotlin
-Scribe.init {
+Scribe.inscribe {
     shelves = listOf(entrySaver)
 }
 Scribe.hire(
@@ -109,14 +109,13 @@ SealedScroll(
 ## Failure Handling
 
 ```kotlin
-Scribe.init {
+Scribe.inscribe {
     shelves = listOf(entrySaver)
-}
-Scribe.hire(
     onIgnition = { throwable ->
         println("Uncaught exception: ${throwable.message}")
-    },
-)
+    }
+}
+Scribe.hire()
 ```
 
 `onIgnition` handles uncaught exceptions at the platform level. Saver failures are handled separately through `ScribeDeliveryConfig.onSaverError`.
