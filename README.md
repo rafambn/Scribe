@@ -31,8 +31,8 @@
 ## Features:
 
 - Story-driven logging primitives instead of flat logger calls
-- Single-event logging with `note(...)` and contextual logging with `unrollScroll(...)`
-- Best-effort non-suspending variants with `flingNote(...)` and `looseSeal(...)`
+- Single-event logging with `note(...)` and contextual logging with `newScroll(...)`
+- Best-effort non-suspending variants with `flingNote(...)` (returns `Boolean` acceptance) and `looseSeal(...)`
 - Delivery hooks through `NoteSaver`, `ScrollSaver`, and `EntrySaver`
 - Scroll lifecycle enrichment through `Margin`
 
@@ -52,18 +52,19 @@ kotlin {
 
 ## Usage
 
-Create a `Scribe` and emit a note:
+Initialize `Scribe`, hire the runtime, and emit a note:
 
 ```kotlin
-val scribe = Scribe(
+Scribe.inscribe {
     shelves = listOf(
         NoteSaver { note ->
             println("[${note.level}] ${note.tag}: ${note.message}")
         }
     )
-)
+}
+Scribe.hire()
 
-scribe.note(
+Scribe.note(
     tag = "payments",
     message = "starting checkout",
     level = Urgency.INFO,
@@ -73,17 +74,18 @@ scribe.note(
 Use a scroll when you need shared context for a longer flow:
 
 ```kotlin
-val scribe = Scribe(
+Scribe.inscribe {
     shelves = listOf(
         ScrollSaver { scroll -> println(scroll) }
-    ),
+    )
     imprint = mapOf(
         "service" to JsonPrimitive("billing"),
         "environment" to JsonPrimitive("production"),
     )
-)
+}
+Scribe.hire()
 
-val scroll = scribe.unrollScroll(id = "checkout-42")
+val scroll = Scribe.newScroll(id = "checkout-42")
 scroll.writeString("gateway", "stripe")
 scroll.writeNumber("attempt", 1)
 scroll.writeBoolean("retry", false)

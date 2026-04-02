@@ -1,10 +1,10 @@
 package com.rafambn.scribe
 
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonPrimitive
 import kotlin.test.Test
 import kotlin.test.assertEquals
-import kotlin.test.assertFailsWith
 import kotlin.test.assertNull
 
 class ScribeDataSerializationTest {
@@ -13,9 +13,9 @@ class ScribeDataSerializationTest {
         runSuspend {
             val shelf = RecordingShelf()
             val scribe = scribeWithScrollShelves(shelf)
-            val scroll = scribe.unrollScroll()
+            val scroll = scribe.newScroll()
 
-            scroll.writeSerializable("meta", GatewayMeta(retries = 2))
+            scroll["meta"] = Json.encodeToJsonElement(GatewayMeta.serializer(), GatewayMeta(retries = 2))
             scroll.seal()
             shelf.awaitEvents(1)
             scribe.retire()
@@ -30,12 +30,12 @@ class ScribeDataSerializationTest {
         runSuspend {
             val shelf = RecordingShelf()
             val scribe = scribeWithScrollShelves(shelf)
-            val scroll = scribe.unrollScroll()
+            val scroll = scribe.newScroll()
 
-            scroll.writeString("message", "accepted")
-            scroll.writeNumber("attempt", 3)
-            scroll.writeBoolean("retry", false)
-            scroll.writeSerializable("meta", GatewayMeta(retries = 2))
+            scroll["message"] = JsonPrimitive("accepted")
+            scroll["attempt"] = JsonPrimitive(3)
+            scroll["retry"] = JsonPrimitive(false)
+            scroll["meta"] = Json.encodeToJsonElement(GatewayMeta.serializer(), GatewayMeta(retries = 2))
             scroll.seal()
             shelf.awaitEvents(1)
             scribe.retire()
@@ -48,28 +48,24 @@ class ScribeDataSerializationTest {
     }
 
     @Test
-    fun write_throws_for_custom_object_without_serializer() {
+    fun map_can_store_serializable_json_value() {
         runSuspend {
-            val shelf = RecordingShelf()
-            val scribe = scribeWithScrollShelves(shelf)
-            val scroll = scribe.unrollScroll()
+            val scribe = scribeWithScrollShelves(RecordingShelf())
+            val scroll = scribe.newScroll()
 
-            assertFailsWith<IllegalArgumentException> {
-                scroll.writeSerializable("meta", NonSerializableMeta(retries = 2))
-            }
+            scroll["meta"] = Json.encodeToJsonElement(GatewayMeta.serializer(), GatewayMeta(retries = 2))
+            assertEquals(JsonObject(mapOf("retries" to JsonPrimitive(2))), scroll["meta"])
         }
     }
 
     @Test
-    fun writeNumber_throws_for_non_finite_values() {
+    fun map_accepts_numeric_values() {
         runSuspend {
-            val shelf = RecordingShelf()
-            val scribe = scribeWithScrollShelves(shelf)
-            val scroll = scribe.unrollScroll()
+            val scribe = scribeWithScrollShelves(RecordingShelf())
+            val scroll = scribe.newScroll()
 
-            assertFailsWith<IllegalArgumentException> {
-                scroll.writeNumber("latency_ms", Double.NaN)
-            }
+            scroll["latency_ms"] = JsonPrimitive(123)
+            assertEquals(JsonPrimitive(123), scroll["latency_ms"])
         }
     }
 
@@ -78,32 +74,32 @@ class ScribeDataSerializationTest {
         runSuspend {
             val shelf = RecordingShelf()
             val scribe = scribeWithScrollShelves(shelf)
-            val scroll = scribe.unrollScroll()
+            val scroll = scribe.newScroll()
 
-            scroll.writeString("key", "value")
-            assertEquals(JsonPrimitive("value"), scroll.read("key"))
-            val removed = scroll.erase("key")
+            scroll["key"] = JsonPrimitive("value")
+            assertEquals(JsonPrimitive("value"), scroll["key"])
+            val removed = scroll.remove("key")
             assertEquals(JsonPrimitive("value"), removed)
-            assertNull(scroll.read("key"))
+            assertNull(scroll["key"])
             scribe.retire()
         }
     }
 
     @Test
-    fun read_and_erase_on_sealed_scroll_return_null() {
+    fun erase_after_seal_mutates_same_backing_map() {
         runSuspend {
             val shelf = RecordingShelf()
             val scribe = scribeWithScrollShelves(shelf)
-            val scroll = scribe.unrollScroll()
+            val scroll = scribe.newScroll()
 
-            scroll.writeString("key", "value")
+            scroll["key"] = JsonPrimitive("value")
             scroll.seal()
-            assertNull(scroll.erase("key"))
+            assertEquals(JsonPrimitive("value"), scroll.remove("key"))
             shelf.awaitEvents(1)
             scribe.retire()
 
             val event = shelf.events.single()
-            assertEquals(JsonPrimitive("value"), event.data["key"])
+            assertNull(event.data["key"])
         }
     }
 }

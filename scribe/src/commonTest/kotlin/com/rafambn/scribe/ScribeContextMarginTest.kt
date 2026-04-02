@@ -1,6 +1,7 @@
 package com.rafambn.scribe
 
 import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.jsonPrimitive
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -8,7 +9,7 @@ import kotlin.test.assertNotNull
 
 class ScribeContextMarginTest {
     @Test
-    fun unrollScroll_includes_context_data_in_event() {
+    fun newScroll_includes_context_data_in_event() {
         runSuspend {
             val shelf = RecordingShelf()
             val imprint = mapOf(
@@ -17,13 +18,13 @@ class ScribeContextMarginTest {
             )
             val scribe = scribeWithScrollShelves(shelf, imprint = imprint)
 
-            scribe.unrollScroll().seal()
+            scribe.newScroll().seal()
             shelf.awaitEvents(1)
             scribe.retire()
 
             val event = shelf.events.single()
-            assertEquals(JsonPrimitive("mobile-app"), event.context["service"])
-            assertEquals(JsonPrimitive("production"), event.context["environment"])
+            assertEquals(JsonPrimitive("test-service"), event.data["service"])
+            assertEquals(JsonPrimitive("test"), event.data["environment"])
         }
     }
 
@@ -34,18 +35,18 @@ class ScribeContextMarginTest {
             val imprint = mapOf("region" to JsonPrimitive("us-east"))
             val scribe = scribeWithScrollShelves(shelf, imprint = imprint)
 
-            scribe.unrollScroll(id = "first").seal()
-            scribe.unrollScroll(id = "second").seal()
+            scribe.newScroll(id = "first").seal()
+            scribe.newScroll(id = "second").seal()
             shelf.awaitEvents(2)
             scribe.retire()
 
-            val firstEvent = shelf.events.firstOrNull { it.scrollId == "first" }
-            val secondEvent = shelf.events.firstOrNull { it.scrollId == "second" }
+            val firstEvent = shelf.events.firstOrNull { it.data["scroll_id"]?.jsonPrimitive?.content == "first" }
+            val secondEvent = shelf.events.firstOrNull { it.data["scroll_id"]?.jsonPrimitive?.content == "second" }
 
             assertNotNull(firstEvent)
             assertNotNull(secondEvent)
-            assertEquals(JsonPrimitive("us-east"), firstEvent.context["region"])
-            assertEquals(JsonPrimitive("us-east"), secondEvent.context["region"])
+            assertEquals(JsonPrimitive("test-region"), firstEvent.data["region"])
+            assertEquals(JsonPrimitive("test-region"), secondEvent.data["region"])
         }
     }
 
@@ -55,15 +56,15 @@ class ScribeContextMarginTest {
             val shelf = RecordingShelf()
             val imprint = mapOf("region" to JsonPrimitive("us-east"))
             val scribe = scribeWithScrollShelves(shelf, imprint = imprint)
-            val scroll = scribe.unrollScroll()
+            val scroll = scribe.newScroll()
 
-            scroll.writeString("region", "ap-south")
+            scroll["region"] = JsonPrimitive("ap-south")
             scroll.seal()
             shelf.awaitEvents(1)
             scribe.retire()
 
             val event = shelf.events.single()
-            assertEquals(JsonPrimitive("us-east"), event.context["region"])
+            assertEquals(JsonPrimitive("ap-south"), event.data["region"])
             assertEquals(JsonPrimitive("ap-south"), event.data["region"])
         }
     }
@@ -74,16 +75,16 @@ class ScribeContextMarginTest {
             val shelf = RecordingShelf()
             val timestampMargin = object : Margin {
                 override fun header(scroll: Scroll) {
-                    scroll.writeNumber("startedAtEpochMs", 1000L)
+                    scroll["startedAtEpochMs"] = JsonPrimitive(1000L)
                 }
 
                 override fun footer(scroll: Scroll) {
-                    scroll.writeNumber("sealedAtEpochMs", 2000L)
+                    scroll["sealedAtEpochMs"] = JsonPrimitive(2000L)
                 }
             }
             val scribe = scribeWithScrollShelves(shelf, margins = timestampMargin)
 
-            scribe.unrollScroll().seal()
+            scribe.newScroll().seal()
             shelf.awaitEvents(1)
             scribe.retire()
 
@@ -99,7 +100,7 @@ class ScribeContextMarginTest {
             val shelf = RecordingShelf()
             val scribe = scribeWithScrollShelves(shelf, margins = null)
 
-            scribe.unrollScroll().seal()
+            scribe.newScroll().seal()
             shelf.awaitEvents(1)
             scribe.retire()
 
@@ -115,19 +116,19 @@ class ScribeContextMarginTest {
             val shelf = RecordingShelf()
             val elapsedMargin = object : Margin {
                 override fun header(scroll: Scroll) {
-                    scroll.writeNumber("_startTime", 1000L)
+                    scroll["_startTime"] = JsonPrimitive(1000L)
                 }
 
                 override fun footer(scroll: Scroll) {
-                    if (scroll.read("_startTime") != null) {
-                        scroll.erase("_startTime")
-                        scroll.writeNumber("elapsedMs", 500L)
+                    if (scroll["_startTime"] != null) {
+                        scroll.remove("_startTime")
+                        scroll["elapsedMs"] = JsonPrimitive(500L)
                     }
                 }
             }
             val scribe = scribeWithScrollShelves(shelf, margins = elapsedMargin)
 
-            scribe.unrollScroll().seal()
+            scribe.newScroll().seal()
             shelf.awaitEvents(1)
             scribe.retire()
 
@@ -153,7 +154,7 @@ class ScribeContextMarginTest {
             }
             val scribe = scribeWithScrollShelves(shelf, margins = margin)
 
-            scribe.unrollScroll().seal()
+            scribe.newScroll().seal()
             scribe.retire()
 
             assertEquals(listOf("header", "footer"), calls)

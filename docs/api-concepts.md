@@ -12,45 +12,49 @@ Both implement the sealed `Entry` interface, which is what `EntrySaver` receives
 ## Terminology
 
 - `note(...)`: suspending call for a single log entry
-- `flingNote(...)`: non-suspending best-effort note dispatch
-- `unrollScroll(...)`: starts a contextual logging session
+- `newScroll(...)`: starts a contextual logging session
 - `seal(...)`: finalizes a scroll and emits a `SealedScroll`
-- `looseSeal(...)`: non-suspending best-effort seal
 - `Margin`: hook for writing fields at open/close boundaries
-- `ScribeDeliveryConfig`: queue size, overflow strategy, and saver error handling
+- `hire(channel = ..., onSaver = ...)`: starts delivery over your channel configuration
 
 ## `Scribe`
 
-`Scribe` is the entry point. It owns:
+`Scribe` is the process-wide singleton entry point. It owns:
 
-- one or more savers (`shelf` or `shelves`)
+- one or more savers (`shelves`)
 - an optional shared `imprint`
-- delivery behavior through `ScribeDeliveryConfig`
 - optional lifecycle hooks through `Margin`
+- optional uncaught exception wiring through `onIgnition`
 
-You can inspect active scrolls with `seekScrolls()` and create a new one with `unrollScroll()`.
+Initialization is done once with `Scribe.inscribe { ... }`.
+
+Delivery is started with `Scribe.hire(...)` and stopped with `retire()`.
 
 ## `Scroll`
 
-`Scroll` collects structured fields until it is sealed.
+`Scroll` is a typealias:
 
 ```kotlin
-val scroll = scribe.unrollScroll("checkout-42")
-scroll.writeString("gateway", "stripe")
-scroll.writeNumber("attempt", 1)
-scroll.writeBoolean("retry", false)
+typealias Scroll = MutableMap<String, JsonElement>
 ```
 
-The API is intentionally explicit:
+You write JSON-safe values directly into the map.
 
-- `writeString(...)`
-- `writeNumber(...)`
-- `writeBoolean(...)`
-- `writeSerializable(...)`
-- `read(...)`
-- `erase(...)`
+```kotlin
+val scroll = Scribe.newScroll(id = "checkout-42")
+scroll["gateway"] = JsonPrimitive("stripe")
+scroll["attempt"] = JsonPrimitive(1)
+scroll["retry"] = JsonPrimitive(false)
+```
 
-After a scroll is sealed, writes and erases stop mutating it.
+You can read/remove fields with normal map operations:
+
+```kotlin
+val phase = scroll["phase"]
+val removed = scroll.remove("retryable")
+```
+
+`scroll.id` reads the generated/custom `scroll_id` field.
 
 ## `Margin`
 
@@ -59,27 +63,32 @@ After a scroll is sealed, writes and erases stop mutating it.
 ```kotlin
 val timingMargin = object : Margin {
     override fun header(scroll: Scroll) {
-        scroll.writeNumber("startedAtEpochMs", 1000L)
+        scroll["started_at"] = JsonPrimitive(1000)
     }
 
     override fun footer(scroll: Scroll) {
-        scroll.writeNumber("sealedAtEpochMs", 2000L)
+        scroll["sealed_at"] = JsonPrimitive(2000)
     }
 }
 ```
 
 ## Delivery Configuration
 
+`Scribe` no longer accepts a dedicated delivery config object. You configure queue behavior through the `Channel<Entry>` you pass to `hire(...)`.
+
 ```kotlin
-val scribe = Scribe(
-    shelf = entrySaver,
-    deliveryConfig = ScribeDeliveryConfig(
-        bufferSize = 256,
-        overflowStrategy = BufferOverflow.DROP_OLDEST,
-        onSaverError = { saver, entry, error ->
-            println("Saver $saver failed for $entry: $error")
-        }
-    )
+Scribe.inscribe {
+    shelves = listOf(entrySaver)
+}
+
+Scribe.hire(
+    channel = Channel(
+        capacity = 256,
+        onBufferOverflow = BufferOverflow.DROP_OLDEST,
+    ),
+    onSaver = { saver, entry, error ->
+        println("Saver $saver failed for $entry: $error")
+    },
 )
 ```
 
@@ -96,23 +105,31 @@ Note(
 
 ```kotlin
 SealedScroll(
-    scrollId = "checkout-42",
     success = true,
     errorMessage = null,
-    context = mapOf(),
-    data = mapOf(),
+    data = mapOf(
+        "scroll_id" to JsonPrimitive("checkout-42"),
+        "gateway" to JsonPrimitive("stripe"),
+    ),
 )
 ```
 
 ## Failure Handling
 
 ```kotlin
-val scribe = Scribe(
-    shelf = entrySaver,
+Scribe.inscribe {
+    shelves = listOf(entrySaver)
     onIgnition = { throwable ->
         println("Uncaught exception: ${throwable.message}")
     }
+}
+
+Scribe.hire(
+    channel = Channel(capacity = 256),
+    onSaver = { saver, entry, error ->
+        println("Saver $saver failed for $entry: ${error.message}")
+    },
 )
 ```
 
-`onIgnition` handles uncaught exceptions at the platform level. Saver failures are handled separately through `ScribeDeliveryConfig.onSaverError`.
+`onIgnition` handles uncaught exceptions at the platform level. Saver failures are reported by the `onSaver` callback passed to `hire(...)`.

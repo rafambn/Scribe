@@ -5,7 +5,7 @@ package com.rafambn.scribe
  */
 interface Margin {
     /**
-     * Called immediately after [Scribe.unrollScroll] creates the scroll.
+     * Called immediately after [Scribe.newScroll] creates the scroll.
      */
     fun header(scroll: Scroll) {}
 

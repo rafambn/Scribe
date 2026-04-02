@@ -1,0 +1,13 @@
+product: android/app
+
+apply:
+  - ../compose.module-template.yaml
+  - ../app.module-template.yaml
+
+dependencies:
+  - androidx.activity:activity-compose:1.8.2
+
+settings:
+  android:
+    minSdk: 24
+  junit: junit-4
