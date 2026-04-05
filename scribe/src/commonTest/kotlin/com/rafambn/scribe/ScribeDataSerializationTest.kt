@@ -102,4 +102,41 @@ class ScribeDataSerializationTest {
             assertNull(event.data["key"])
         }
     }
+
+    @Test
+    fun extend_copies_only_missing_values_into_target_scroll() {
+        runSuspend {
+            val scribe = scribeWithScrollShelves(RecordingShelf())
+            val target = scribe.newScroll(id = "target")
+            val source = scribe.newScroll(id = "source")
+
+            target["gateway"] = JsonPrimitive("adyen")
+            source["gateway"] = JsonPrimitive("stripe")
+            source["attempt"] = JsonPrimitive(2)
+            target.extend(source)
+
+            assertEquals(JsonPrimitive("adyen"), target["gateway"])
+            assertEquals(JsonPrimitive(2), target["attempt"])
+            assertEquals(JsonPrimitive("target"), target["scroll_id"])
+        }
+    }
+
+    @Test
+    fun append_adds_scroll_as_nested_json_object() {
+        runSuspend {
+            val scribe = scribeWithScrollShelves(RecordingShelf())
+            val target = scribe.newScroll(id = "target")
+            val source = scribe.newScroll(id = "child")
+
+            source["gateway"] = JsonPrimitive("stripe")
+            source["attempt"] = JsonPrimitive(2)
+            target.append("payment", source)
+
+            val nested = target["payment"] as? JsonObject
+            assertEquals(JsonPrimitive("child"), nested?.get("scroll_id"))
+            assertEquals(JsonPrimitive("stripe"), nested?.get("gateway"))
+            assertEquals(JsonPrimitive(2), nested?.get("attempt"))
+            assertEquals(JsonPrimitive("target"), target["scroll_id"])
+        }
+    }
 }
