@@ -43,18 +43,16 @@ class ScribeConcurrencyAndScrollTest {
             val scroll = scribe.newScroll(id = "scroll-id")
 
             scroll["state"] = JsonPrimitive("initial")
-            val first = scroll.seal(success = false, error = IllegalStateException("first"))
-            val second = scroll.seal(success = true, error = null)
+            val first = scroll.seal(success = false)
+            val second = scroll.seal(success = true)
             shelf.awaitEvents(2)
             scribe.retire()
 
             assertEquals(false, first.success)
-            assertEquals("first", first.errorMessage)
             assertEquals(JsonPrimitive("initial"), first.data["state"])
 
             // Current behavior emits one SealedScroll per seal call.
             assertEquals(true, second.success)
-            assertEquals(null, second.errorMessage)
             assertEquals(JsonPrimitive("initial"), second.data["state"])
             assertEquals(2, shelf.events.size)
         }

@@ -10,7 +10,7 @@ The app covers the current public runtime features of Scribe:
 - `newScroll(...)` with generated and custom IDs
 - direct `Scroll` map writes (`scroll["field"] = ...`)
 - map read/remove operations
-- `seal(...)` with success and error outcomes
+- `seal(...)` with success and failure outcomes
 - `Margin`
 - `EntrySaver`
 - channel overflow behavior via `Channel(..., onBufferOverflow = DROP_OLDEST)`
@@ -31,7 +31,7 @@ That stream intentionally allows sparse fields. Every uploaded record includes:
 - `saver_type`
 
 Notes then contribute fields such as `tag`, `message`, `level`, and `note_timestamp`.
-Scrolls contribute `scroll_id`, `success`, `error_message`, and fields from `SealedScroll.data`.
+Scrolls contribute `scroll_id`, `success`, and fields from `SealedScroll.data`.
 
 The single-stream design makes it easy to search everything in one place while still filtering by `event_kind`.
 
@@ -76,7 +76,7 @@ or:
 
 1. Run `Checkout flow` and inspect the wide-event payload in `scribe_demo`.
 2. Run `Map read/remove` to inspect map mutation behavior before sealing.
-3. Run `Margins + seal(error)` and verify timing fields plus `success = false`.
+3. Run `Margins + seal(failure)` and verify timing fields plus `success = false`.
 4. Run `JSON object serialization` to validate nested payload fields in OpenObserve.
 5. Run `String template message` to inspect message rendering in the `message` field.
 6. Run `EntrySaver mixed flow` to send a note and a scroll through one saver path.

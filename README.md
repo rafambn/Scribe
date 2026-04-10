@@ -44,7 +44,7 @@ Add Scribe to your `commonMain` dependencies:
 kotlin {
     sourceSets {
         commonMain.dependencies {
-            implementation("com.rafambn:scribe:0.1.0")
+            implementation("com.rafambn:scribe:0.2.3")
         }
     }
 }

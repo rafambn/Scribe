@@ -76,7 +76,7 @@ The UI contains grouped demo actions:
 - `Run second note(...)`
 - `Checkout flow`
 - `Map read/remove`
-- `Margins + seal(error)`
+- `Margins + seal(failure)`
 - `JSON object serialization`
 - `String template message`
 - `EntrySaver mixed flow`

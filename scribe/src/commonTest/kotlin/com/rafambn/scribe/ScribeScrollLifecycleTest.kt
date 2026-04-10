@@ -36,14 +36,13 @@ class ScribeScrollLifecycleTest {
 
             scroll["gateway"] = JsonPrimitive("stripe")
 
-            scroll.seal(success = false, error = IllegalStateException("fail"))
+            scroll.seal(success = false)
             scroll.seal(success = true)
             shelf.awaitEvents(2)
             scribe.retire()
             val firstEvent = shelf.events.first()
             val secondEvent = shelf.events.last()
             assertFalse(firstEvent.success)
-            assertEquals("fail", firstEvent.errorMessage)
             assertTrue(secondEvent.success)
             assertEquals(JsonPrimitive("stripe"), firstEvent.data["gateway"])
         }
@@ -75,7 +74,6 @@ class ScribeScrollLifecycleTest {
             assertNotNull(failureEvent)
             assertTrue(successEvent.success)
             assertFalse(failureEvent.success)
-            assertEquals("order2 failed", failureEvent.errorMessage)
         }
     }
 

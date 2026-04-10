@@ -177,20 +177,20 @@ class ShowcaseController {
         updateStatus("Ran custom-id scroll demo with map reads/removals and local active-scroll tracking.")
     }
 
-    fun runMarginScenario() = launchScenario("Margin + seal(error) demo") {
+    fun runMarginScenario() = launchScenario("Margin + seal(failure) demo") {
         val scribe = activeMainScribe("margin_scroll") ?: return@launchScenario
         val scroll = openScroll(scribe, id = "inventory-sync-1")
         scroll["demo_name"] = JsonPrimitive("margin_scroll")
         scroll["flow"] = JsonPrimitive("inventory-sync")
         scroll["warehouse"] = JsonPrimitive("gru-1")
         scroll["cache_hit"] = JsonPrimitive(false)
+        scroll["failure_reason"] = JsonPrimitive("downstream retry scheduled")
         sealScroll(
             scroll,
             success = false,
-            error = IllegalStateException("downstream retry scheduled"),
         )
         delay(250)
-        updateStatus("Ran Margin header/footer hooks with seal(success = false, error = ...).")
+        updateStatus("Ran Margin header/footer hooks with seal(success = false).")
     }
 
     fun runJsonSerializationScenario() = launchScenario("JSON serialization scroll demo") {
@@ -535,8 +535,8 @@ class ShowcaseController {
         return scroll
     }
 
-    private suspend fun sealScroll(scroll: Scroll, success: Boolean, error: Throwable? = null) {
-        scroll.seal(success = success, error = error)
+    private suspend fun sealScroll(scroll: Scroll, success: Boolean) {
+        scroll.seal(success = success)
         activeScrolls.remove(scroll.id)
         refreshActiveScrolls()
     }

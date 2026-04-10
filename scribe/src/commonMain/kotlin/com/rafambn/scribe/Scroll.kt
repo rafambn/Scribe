@@ -18,13 +18,9 @@ val Scroll.id: String
 /**
  * Seals this scroll and suspends until its [SealedScroll] is enqueued.
  */
-suspend fun Scroll.seal(success: Boolean = true, error: Throwable? = null): SealedScroll {
+suspend fun Scroll.seal(success: Boolean = true): SealedScroll {
     Scribe.config?.margins?.footer(this)
-    val result = SealedScroll(
-        success = success,
-        errorMessage = error?.message,
-        data = this,
-    )
+    val result = SealedScroll(success = success, data = this)
     Scribe.enqueue(result)
     return result
 }

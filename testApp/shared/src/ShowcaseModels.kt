@@ -95,7 +95,6 @@ fun payloadFromEntry(
             payload["saver_type"] = JsonPrimitive(saverType)
             payload["scroll_id"] = JsonPrimitive(stringField(entry.data, "scroll_id") ?: "missing-scroll-id")
             payload["success"] = JsonPrimitive(entry.success)
-            entry.errorMessage?.let { payload["error_message"] = JsonPrimitive(it) }
             stringField(entry.data, "message")?.let { payload["message"] = JsonPrimitive(it) }
             entry.data["order_id"]?.let { payload["order_id"] = it }
                 ?: entry.data["ordemId"]?.let { payload["order_id"] = it }

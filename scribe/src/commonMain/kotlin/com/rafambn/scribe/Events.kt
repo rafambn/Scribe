@@ -14,7 +14,6 @@ sealed interface Entry
 @Serializable
 data class SealedScroll(
     val success: Boolean,
-    val errorMessage: String?,
     val data: Map<String, JsonElement>,
 ): Entry
 
