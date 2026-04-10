@@ -81,7 +81,7 @@ fun Screen() {
                     buttons = listOf(
                         "Checkout flow" to controller::runCheckoutScenario,
                         "Map read/remove" to controller::runInspectionScenario,
-                        "Margins + seal(error)" to controller::runMarginScenario,
+                        "Margins + seal(failure)" to controller::runMarginScenario,
                     ),
                     enabled = !state.isBusy,
                 )

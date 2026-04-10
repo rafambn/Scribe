@@ -105,7 +105,7 @@ internal class PaymentService {
             scroll["gateway"] = JsonPrimitive("stripe")
         } catch (t: Throwable) {
             scroll["error_stage"] = JsonPrimitive("gateway_call")
-            scroll.seal(success = false, error = t)
+            scroll.seal(success = false)
             throw t
         }
     }

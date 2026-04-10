@@ -8,7 +8,7 @@ Use the library from shared code in your Kotlin Multiplatform module:
 kotlin {
     sourceSets {
         commonMain.dependencies {
-            implementation("com.rafambn:scribe:0.1.0")
+            implementation("com.rafambn:scribe:0.2.3")
         }
     }
 }
@@ -78,7 +78,6 @@ The emitted `SealedScroll` shape:
 ```json
 {
   "success": true,
-  "errorMessage": null,
   "data": {
     "scroll_id": "checkout-42",
     "gateway": "stripe",

@@ -8,7 +8,7 @@ apply:
 dependencies:
   - $compose.foundation: exported
   - $compose.material3: exported
-  - com.rafambn:scribe:0.1.0
+  - com.rafambn:scribe:0.2.3
   - org.jetbrains.kotlinx:kotlinx-datetime:0.7.1
 
 settings:

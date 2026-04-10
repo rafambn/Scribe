@@ -106,7 +106,6 @@ Note(
 ```kotlin
 SealedScroll(
     success = true,
-    errorMessage = null,
     data = mapOf(
         "scroll_id" to JsonPrimitive("checkout-42"),
         "gateway" to JsonPrimitive("stripe"),
