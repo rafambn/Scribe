@@ -11,7 +11,7 @@ plugins {
 }
 
 group = "com.rafambn"
-version = "0.2.3"
+version = "0.3.1"
 
 kotlin {
     jvm {
