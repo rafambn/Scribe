@@ -24,7 +24,7 @@ jobs:
         include:
           - target: jvmTest
             os: ubuntu-latest
-          - target: iosArm64Test
+          - target: iosArm64TestKlibrary
             os: macos-latest
           - target: testAndroidHostTest
             os: ubuntu-latest
