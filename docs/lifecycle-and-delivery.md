@@ -2,7 +2,7 @@
 
 ## Delivery Pipeline
 
-`Scribe` delivers entries through the `Channel<Entry>` you provide to `hire(...)`.
+`Scribe` delivers entries through the `Channel<Entry>` you provide to `hire(...)`. The channel is disposable and transfers ownership to Scribe, which closes it on processor completion or `retire()`. Create a fresh channel for each `hire(...)` call.
 
 ```kotlin
 Scribe.inscribe {
@@ -82,7 +82,7 @@ Use `retire()` to stop intake and wait until queued delivery work is finished.
 Scribe.retire()
 ```
 
-After `retire()`, you can call `hire(...)` again (with a new channel) to restart runtime delivery.
+After `retire()`, the previous channel is closed and cannot be reused. Call `hire(...)` with a new channel to restart runtime delivery.
 
 ## Uncaught Exceptions
 

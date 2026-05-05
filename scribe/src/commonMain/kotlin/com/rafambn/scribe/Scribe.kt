@@ -45,6 +45,10 @@ object Scribe {
 
     /**
      * Starts the delivery runtime using previously initialized parameters.
+     *
+     * The provided [channel] becomes disposable and transfers ownership to Scribe.
+     * Scribe closes the channel when the processor completes or when [retire] is called.
+     * Create a fresh channel for each call to this method.
      */
     fun hire(
         scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Default),
@@ -103,7 +107,10 @@ object Scribe {
     }
 
     /**
-     * Stops accepting entries and waits for queued events to finish delivery.
+     * Stops accepting entries, closes the delivery channel, and waits for queued events to finish delivery.
+     *
+     * The channel passed to [hire] is closed and must not be reused.
+     * After this call completes, you may call [hire] again with a fresh channel.
      */
     suspend fun retire() {
         val queue = activeQueue ?: return
