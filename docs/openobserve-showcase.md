@@ -9,6 +9,8 @@ The app covers the current public runtime features of Scribe:
 - `note(...)`
 - `newScroll(...)` with generated and custom IDs
 - direct `Scroll` map writes (`scroll["field"] = ...`)
+- `extend(scroll)` to copy missing keys from another scroll
+- `append(key, scroll)` to nest a scroll as a JSON object
 - map read/remove operations
 - `seal(...)` with success and failure outcomes
 - `Margin`
@@ -83,6 +85,8 @@ or:
 7. Run `Overflow demo` and confirm a burst can be trimmed by `DROP_OLDEST` under pressure.
 8. Run `Saver failure demo` and observe that `onSaver` reports the injected failure while delivery continues.
 9. Compare `retire() (light queue)` with `retire() with backlog` in the in-app timeline.
+10. Run `Extend scroll` to verify keys are copied only when missing from the target scroll.
+11. Run `Append scroll` to validate nested JSON object creation in OpenObserve.
 
 ## Querying In OpenObserve
 

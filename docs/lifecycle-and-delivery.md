@@ -4,6 +4,17 @@
 
 `Scribe` delivers entries through the `Channel<Entry>` you provide to `hire(...)`. The channel is disposable and transfers ownership to Scribe, which closes it on processor completion or `retire()`. Create a fresh channel for each `hire(...)` call.
 
+You can optionally provide a custom `CoroutineScope` to control the delivery coroutine lifecycle:
+
+```kotlin
+val customScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
+Scribe.hire(
+    scope = customScope,
+    channel = Channel(capacity = 256),
+)
+```
+
 ```kotlin
 Scribe.inscribe {
     shelves = listOf(EntrySaver { entry ->

@@ -56,6 +56,17 @@ With the saver above, the log output looks like this:
 `Scroll` is a mutable map (`MutableMap<String, JsonElement>`) that you seal into one wide event.
 Each `seal(...)` call emits a new `SealedScroll` using a snapshot of the scroll data at that moment.
 
+You can also merge other scrolls or nest them:
+
+```kotlin
+val base = Scribe.newScroll()
+base["gateway"] = JsonPrimitive("stripe")
+
+val checkout = Scribe.newScroll(id = "checkout-42")
+checkout.extend(base) // copies missing keys from base
+checkout.append("meta", mapOf("items" to JsonPrimitive(3)))
+```
+
 ```kotlin
 val scroll = Scribe.newScroll(id = "checkout-42")
 scroll["gateway"] = JsonPrimitive("stripe")
