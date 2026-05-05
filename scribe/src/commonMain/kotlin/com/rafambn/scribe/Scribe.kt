@@ -4,6 +4,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.launch
@@ -63,8 +64,14 @@ object Scribe {
                             is ScrollSaver if entry is SealedScroll -> saver.write(entry)
                             is NoteSaver if entry is Note -> saver.write(entry)
                         }
+                    } catch (e: CancellationException) {
+                        throw e
                     } catch (e: Throwable) {
-                        onSaver?.invoke(saver, entry, e)
+                        try {
+                            onSaver?.invoke(saver, entry, e)
+                        } catch (_: Throwable) {
+                            // Ignore callback failures to keep delivery alive.
+                        }
                     }
                 }
             }

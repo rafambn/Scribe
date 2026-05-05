@@ -19,9 +19,6 @@ kotlin {
 Initialize once with one or more savers, then hire the runtime with a `Channel<Entry>`.
 
 ```kotlin
-import kotlinx.coroutines.channels.BufferOverflow
-import kotlinx.coroutines.channels.Channel
-
 Scribe.inscribe {
     shelves = listOf(NoteSaver { note ->
         println("[${note.level}] ${note.tag}: ${note.message}")

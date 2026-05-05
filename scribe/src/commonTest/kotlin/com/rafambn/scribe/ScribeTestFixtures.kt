@@ -1,6 +1,7 @@
 package com.rafambn.scribe
 
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.runBlocking
@@ -40,8 +41,14 @@ private val delegatingEntrySaver = EntrySaver { entry ->
                 is ScrollSaver if entry is SealedScroll -> saver.write(entry)
                 is NoteSaver if entry is Note -> saver.write(entry)
             }
+        } catch (error: CancellationException) {
+            throw error
         } catch (error: Throwable) {
-            onSaverErrorCallback(saver, entry, error)
+            try {
+                onSaverErrorCallback(saver, entry, error)
+            } catch (_: Throwable) {
+                // Keep test delivery path alive when callback fails.
+            }
         }
     }
 }

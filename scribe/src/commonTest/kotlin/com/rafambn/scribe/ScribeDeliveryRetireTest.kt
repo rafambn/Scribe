@@ -1,6 +1,7 @@
 package com.rafambn.scribe
 
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.cancel
@@ -229,6 +230,48 @@ class ScribeDeliveryRetireTest {
             assertEquals(1, errors.size)
             assertTrue(events.single() is Note)
             assertEquals("boom", errors.single().message)
+        }
+    }
+
+    @Test
+    fun onSaverError_callback_failure_does_not_stop_delivery() {
+        runSuspend {
+            val failingSaver = EntrySaver { throw IllegalStateException("boom") }
+            val recordingSaver = RecordingEntrySaver()
+            val scribe = scribeWithSavers(
+                shelves = listOf(failingSaver, recordingSaver),
+                onSaver = { _, _, _ ->
+                    throw IllegalStateException("callback-failed")
+                },
+            )
+
+            scribe.note(tag = "payments", message = "started", level = Urgency.INFO, timestamp = 10L)
+            scribe.note(tag = "payments", message = "continued", level = Urgency.INFO, timestamp = 11L)
+            recordingSaver.awaitEvents(2)
+            scribe.retire()
+
+            assertEquals(2, recordingSaver.events.size)
+        }
+    }
+
+    @Test
+    fun saver_cancellation_is_not_reported_to_onSaver() {
+        runSuspend {
+            val reportedErrors = mutableListOf<Throwable>()
+            val cancelingSaver = EntrySaver { throw CancellationException("cancel-delivery") }
+            val scribe = scribeWithSavers(
+                shelves = listOf(cancelingSaver),
+                channel = Channel(capacity = 16),
+                onSaver = { _, _, error ->
+                    reportedErrors += error
+                },
+            )
+
+            scribe.note(tag = "payments", message = "started", level = Urgency.INFO, timestamp = 12L)
+            delay(50)
+            scribe.retire()
+
+            assertTrue(reportedErrors.isEmpty())
         }
     }
 }
