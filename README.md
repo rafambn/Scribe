@@ -92,6 +92,8 @@ scroll.writeBoolean("retry", false)
 scroll.seal(success = true)
 ```
 
+Each `seal(...)` call emits a separate `SealedScroll` snapshot, so sealing the same scroll more than once is allowed when you need multiple terminal records.
+
 Choose the saver that matches your output flow:
 
 ```kotlin

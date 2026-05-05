@@ -36,7 +36,7 @@ class ScribeConcurrencyAndScrollTest {
     }
 
     @Test
-    fun scroll_double_seal_is_idempotent_and_emits_only_once() {
+    fun scroll_double_seal_emits_one_event_per_seal_call() {
         runSuspend {
             val shelf = RecordingShelf()
             val scribe = scribeWithScrollShelves(shelf)
@@ -51,7 +51,6 @@ class ScribeConcurrencyAndScrollTest {
             assertEquals(false, first.success)
             assertEquals(JsonPrimitive("initial"), first.data["state"])
 
-            // Current behavior emits one SealedScroll per seal call.
             assertEquals(true, second.success)
             assertEquals(JsonPrimitive("initial"), second.data["state"])
             assertEquals(2, shelf.events.size)

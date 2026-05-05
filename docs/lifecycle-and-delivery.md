@@ -27,9 +27,11 @@ Scribe.hire(
 Current emission calls are suspending:
 
 - `note(...)` sends a `Note`
-- `seal(...)` sends a `SealedScroll`
+- `seal(...)` snapshots the current `Scroll` data and sends a `SealedScroll`
 
 There are no separate best-effort APIs in this runtime shape.
+
+Multiple calls to `seal(...)` on the same `Scroll` are intentional. Each call emits a separate `SealedScroll`, so a flow can record more than one terminal snapshot when that is useful.
 
 ## Shared Context with `imprint`
 

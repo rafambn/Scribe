@@ -86,7 +86,7 @@ class ScribeDataSerializationTest {
     }
 
     @Test
-    fun erase_after_seal_mutates_same_backing_map() {
+    fun erase_after_seal_does_not_mutate_sealed_event_snapshot() {
         runSuspend {
             val shelf = RecordingShelf()
             val scribe = scribeWithScrollShelves(shelf)
@@ -99,7 +99,7 @@ class ScribeDataSerializationTest {
             scribe.retire()
 
             val event = shelf.events.single()
-            assertNull(event.data["key"])
+            assertEquals(JsonPrimitive("value"), event.data["key"])
         }
     }
 

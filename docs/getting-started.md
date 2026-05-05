@@ -57,6 +57,7 @@ With the saver above, the log output looks like this:
 ## Track a Flow with `Scroll`
 
 `Scroll` is a mutable map (`MutableMap<String, JsonElement>`) that you seal into one wide event.
+Each `seal(...)` call emits a new `SealedScroll` using a snapshot of the scroll data at that moment.
 
 ```kotlin
 import kotlinx.serialization.json.Json

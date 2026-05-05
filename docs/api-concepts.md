@@ -5,7 +5,7 @@
 Scribe models logging with two event shapes:
 
 - `Note`: a single standalone event
-- `SealedScroll`: the finalized result of a multi-step `Scroll`
+- `SealedScroll`: a sealed snapshot result of a multi-step `Scroll`
 
 Both implement the sealed `Entry` interface, which is what `EntrySaver` receives.
 
@@ -13,7 +13,7 @@ Both implement the sealed `Entry` interface, which is what `EntrySaver` receives
 
 - `note(...)`: suspending call for a single log entry
 - `newScroll(...)`: starts a contextual logging session
-- `seal(...)`: finalizes a scroll and emits a `SealedScroll`
+- `seal(...)`: snapshots the current scroll data and emits a `SealedScroll`
 - `Margin`: hook for writing fields at open/close boundaries
 - `hire(channel = ..., onSaver = ...)`: starts delivery over your channel configuration
 
@@ -55,6 +55,8 @@ val removed = scroll.remove("retryable")
 ```
 
 `scroll.id` reads the generated/custom `scroll_id` field.
+
+Calling `seal(...)` more than once is allowed. Each call emits a separate `SealedScroll` with the current `success` value and a snapshot of the data at that point.
 
 ## `Margin`
 
