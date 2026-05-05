@@ -12,13 +12,6 @@ import kotlinx.serialization.json.JsonPrimitive
 internal val UUID_REGEX =
     Regex("^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$")
 
-private val defaultTestImprint = mapOf(
-    "service" to JsonPrimitive("test-service"),
-    "environment" to JsonPrimitive("test"),
-    "region" to JsonPrimitive("test-region"),
-)
-
-private var initialized = false
 private var activeDelegatedSavers: List<Saver<*>> = emptyList()
 private var activeMargin: Margin? = null
 private var onSaverErrorCallback: (saver: Saver<*>, entry: Entry, error: Throwable) -> Unit = { _, _, _ -> }
@@ -53,14 +46,16 @@ private val delegatingEntrySaver = EntrySaver { entry ->
     }
 }
 
+private var isInitialized = false
+
 private fun ensureScribeInitialized() {
-    if (initialized) return
+    if (isInitialized) return
     Scribe.inscribe {
         shelves = listOf(delegatingEntrySaver)
-        imprint = defaultTestImprint
+        imprint = emptyMap()
         margins = delegatingMargin
     }
-    initialized = true
+    isInitialized = true
 }
 
 internal fun scribeWithScrollShelves(
@@ -72,6 +67,7 @@ internal fun scribeWithScrollShelves(
 ): Scribe {
     ensureScribeInitialized()
     runBlocking { Scribe.retire() }
+    Scribe.config!!.imprint = imprint
     activeDelegatedSavers = shelves.toList()
     activeMargin = margins
     onSaverErrorCallback = onSaver
@@ -81,12 +77,14 @@ internal fun scribeWithScrollShelves(
 
 internal fun scribeWithSavers(
     shelves: List<Saver<*>>,
+    imprint: Map<String, JsonElement> = emptyMap(),
     margins: Margin? = null,
     channel: Channel<Entry> = Channel(capacity = 256, onBufferOverflow = BufferOverflow.DROP_OLDEST),
     onSaver: (saver: Saver<*>, entry: Entry, error: Throwable) -> Unit = { _, _, _ -> },
 ): Scribe {
     ensureScribeInitialized()
     runBlocking { Scribe.retire() }
+    Scribe.config!!.imprint = imprint
     activeDelegatedSavers = shelves
     activeMargin = margins
     onSaverErrorCallback = onSaver

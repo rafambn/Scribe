@@ -57,9 +57,6 @@ With the saver above, the log output looks like this:
 Each `seal(...)` call emits a new `SealedScroll` using a snapshot of the scroll data at that moment.
 
 ```kotlin
-import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.JsonPrimitive
-
 val scroll = Scribe.newScroll(id = "checkout-42")
 scroll["gateway"] = JsonPrimitive("stripe")
 scroll["attempt"] = JsonPrimitive(1)

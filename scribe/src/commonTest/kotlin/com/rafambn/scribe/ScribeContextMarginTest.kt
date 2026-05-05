@@ -23,8 +23,8 @@ class ScribeContextMarginTest {
             scribe.retire()
 
             val event = shelf.events.single()
-            assertEquals(JsonPrimitive("test-service"), event.data["service"])
-            assertEquals(JsonPrimitive("test"), event.data["environment"])
+            assertEquals(JsonPrimitive("mobile-app"), event.data["service"])
+            assertEquals(JsonPrimitive("production"), event.data["environment"])
         }
     }
 
@@ -45,8 +45,8 @@ class ScribeContextMarginTest {
 
             assertNotNull(firstEvent)
             assertNotNull(secondEvent)
-            assertEquals(JsonPrimitive("test-region"), firstEvent.data["region"])
-            assertEquals(JsonPrimitive("test-region"), secondEvent.data["region"])
+            assertEquals(JsonPrimitive("us-east"), firstEvent.data["region"])
+            assertEquals(JsonPrimitive("us-east"), secondEvent.data["region"])
         }
     }
 
