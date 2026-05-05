@@ -116,9 +116,10 @@ object Scribe {
      * this function returns immediately without waiting to avoid deadlocks.
      */
     suspend fun retire() {
-        val queue = activeQueue ?: return
+        val queue = activeQueue
         val runningProcessor = processorJob
-        queue.close()
+        if (queue == null && runningProcessor == null) return
+        queue?.close()
         activeQueue = null
         val callerJob = currentCoroutineContext()[Job]
         if (runningProcessor != null && !isProcessorFamily(runningProcessor, callerJob)) {

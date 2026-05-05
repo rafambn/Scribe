@@ -13,3 +13,6 @@ xcuserdata
 *.gpg
 site
 testApp/openobserve/data
+.codex
+.gradle-user
+.gradle-local
