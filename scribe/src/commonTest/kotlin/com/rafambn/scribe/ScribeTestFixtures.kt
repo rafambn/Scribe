@@ -49,7 +49,9 @@ private val delegatingEntrySaver = EntrySaver { entry ->
 private var isInitialized = false
 
 private fun ensureScribeInitialized() {
-    if (isInitialized) return
+    if (isInitialized) {
+        runBlocking { Scribe.retire() }
+    }
     Scribe.inscribe {
         shelves = listOf(delegatingEntrySaver)
         imprint = emptyMap()
@@ -66,7 +68,6 @@ internal fun scribeWithScrollShelves(
     margins: Margin? = null,
 ): Scribe {
     ensureScribeInitialized()
-    runBlocking { Scribe.retire() }
     Scribe.config!!.imprint = imprint
     activeDelegatedSavers = shelves.toList()
     activeMargin = margins
@@ -83,7 +84,6 @@ internal fun scribeWithSavers(
     onSaver: (saver: Saver<*>, entry: Entry, error: Throwable) -> Unit = { _, _, _ -> },
 ): Scribe {
     ensureScribeInitialized()
-    runBlocking { Scribe.retire() }
     Scribe.config!!.imprint = imprint
     activeDelegatedSavers = shelves
     activeMargin = margins

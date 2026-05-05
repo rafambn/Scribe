@@ -5,6 +5,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.launch
@@ -29,10 +30,9 @@ object Scribe {
     /**
      * Initializes the singleton with immutable parameters.
      *
-     * This function can be called only once per process lifetime.
+     * This function can be called again after [retire] has been called.
      */
     fun inscribe(block: Inscribe.() -> Unit) {
-        check(config == null) { "Scribe is already initialized and cannot be initialized again." }
         val dsl = Inscribe().apply(block)
         val configuredShelves = dsl.shelves
         require(configuredShelves.isNotEmpty()) { "At least one shelf is required." }
@@ -111,6 +111,9 @@ object Scribe {
      *
      * The channel passed to [hire] is closed and must not be reused.
      * After this call completes, you may call [hire] again with a fresh channel.
+     *
+     * If called from within the processor coroutine (e.g., from a saver),
+     * this function returns immediately without waiting to avoid deadlocks.
      */
     suspend fun retire() {
         val queue = activeQueue ?: return
@@ -120,10 +123,22 @@ object Scribe {
         val callerJob = currentCoroutineContext()[Job]
         if (runningProcessor != null && !isProcessorFamily(runningProcessor, callerJob)) {
             runningProcessor.join()
-            if (processorJob === runningProcessor) {
-                processorJob = null
-            }
         }
+    }
+
+    /**
+     * Checks if the caller job is the processor itself or a descendant.
+     * Traverses from caller up through parents to handle any nesting depth.
+     */
+    @OptIn(ExperimentalCoroutinesApi::class)
+    private fun isProcessorFamily(root: Job, target: Job?): Boolean {
+        if (target == null) return false
+        var current: Job? = target
+        while (current != null) {
+            if (current === root) return true
+            current = current.parent
+        }
+        return false
     }
 
     /**
@@ -154,24 +169,5 @@ object Scribe {
 
     internal suspend fun enqueue(entry: Entry) {
         requireActiveQueue().send(entry)
-    }
-
-    private fun isProcessorFamily(root: Job, target: Job?): Boolean {
-        if (target == null) return false
-        if (target === root) return true
-        return containsDescendant(root, target)
-    }
-
-    private fun containsDescendant(root: Job, target: Job): Boolean {
-        val queue = ArrayDeque<Job>()
-        queue.add(root)
-        while (queue.isNotEmpty()) {
-            val current = queue.removeFirst()
-            current.children.forEach { child ->
-                if (child === target) return true
-                queue.addLast(child)
-            }
-        }
-        return false
     }
 }
