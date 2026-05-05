@@ -17,10 +17,12 @@ val Scroll.id: String
 
 /**
  * Seals this scroll and suspends until its [SealedScroll] is enqueued.
+ *
+ * Every call emits a new [SealedScroll] with a snapshot of the current data.
  */
 suspend fun Scroll.seal(success: Boolean = true): SealedScroll {
     Scribe.config?.margins?.footer(this)
-    val result = SealedScroll(success = success, data = this)
+    val result = SealedScroll(success = success, data = this.toMap())
     Scribe.enqueue(result)
     return result
 }

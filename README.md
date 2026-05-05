@@ -32,7 +32,6 @@
 
 - Story-driven logging primitives instead of flat logger calls
 - Single-event logging with `note(...)` and contextual logging with `newScroll(...)`
-- Best-effort non-suspending variants with `flingNote(...)` (returns `Boolean` acceptance) and `looseSeal(...)`
 - Delivery hooks through `NoteSaver`, `ScrollSaver`, and `EntrySaver`
 - Scroll lifecycle enrichment through `Margin`
 
@@ -62,7 +61,7 @@ Scribe.inscribe {
         }
     )
 }
-Scribe.hire()
+Scribe.hire(channel = Channel(capacity = 256))
 
 Scribe.note(
     tag = "payments",
@@ -83,14 +82,16 @@ Scribe.inscribe {
         "environment" to JsonPrimitive("production"),
     )
 }
-Scribe.hire()
+Scribe.hire(channel = Channel(capacity = 256))
 
 val scroll = Scribe.newScroll(id = "checkout-42")
-scroll.writeString("gateway", "stripe")
-scroll.writeNumber("attempt", 1)
-scroll.writeBoolean("retry", false)
+scroll["gateway"] = JsonPrimitive("stripe")
+scroll["attempt"] = JsonPrimitive(1)
+scroll["retry"] = JsonPrimitive(false)
 scroll.seal(success = true)
 ```
+
+Each `seal(...)` call emits a separate `SealedScroll` snapshot, so sealing the same scroll more than once is allowed when you need multiple terminal records.
 
 Choose the saver that matches your output flow:
 

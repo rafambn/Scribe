@@ -28,7 +28,7 @@ class ScribeScrollLifecycleTest {
     }
 
     @Test
-    fun seal_is_idempotent_and_writes_once() {
+    fun each_seal_call_emits_a_new_event() {
         runSuspend {
             val shelf = RecordingShelf()
             val scribe = scribeWithScrollShelves(shelf)
