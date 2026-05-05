@@ -2,7 +2,18 @@
 
 ## Delivery Pipeline
 
-`Scribe` delivers entries through the `Channel<Entry>` you provide to `hire(...)`.
+`Scribe` delivers entries through the `Channel<Entry>` you provide to `hire(...)`. The channel is disposable and transfers ownership to Scribe, which closes it on processor completion or `retire()`. Create a fresh channel for each `hire(...)` call.
+
+You can optionally provide a custom `CoroutineScope` to control the delivery coroutine lifecycle:
+
+```kotlin
+val customScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
+Scribe.hire(
+    scope = customScope,
+    channel = Channel(capacity = 256),
+)
+```
 
 ```kotlin
 Scribe.inscribe {
@@ -27,9 +38,11 @@ Scribe.hire(
 Current emission calls are suspending:
 
 - `note(...)` sends a `Note`
-- `seal(...)` sends a `SealedScroll`
+- `seal(...)` snapshots the current `Scroll` data and sends a `SealedScroll`
 
 There are no separate best-effort APIs in this runtime shape.
+
+Multiple calls to `seal(...)` on the same `Scroll` are intentional. Each call emits a separate `SealedScroll`, so a flow can record more than one terminal snapshot when that is useful.
 
 ## Shared Context with `imprint`
 
@@ -80,7 +93,7 @@ Use `retire()` to stop intake and wait until queued delivery work is finished.
 Scribe.retire()
 ```
 
-After `retire()`, you can call `hire(...)` again (with a new channel) to restart runtime delivery.
+After `retire()`, the previous channel is closed and cannot be reused. Call `hire(...)` with a new channel to restart runtime delivery.
 
 ## Uncaught Exceptions
 

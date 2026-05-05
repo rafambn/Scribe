@@ -19,9 +19,6 @@ kotlin {
 Initialize once with one or more savers, then hire the runtime with a `Channel<Entry>`.
 
 ```kotlin
-import kotlinx.coroutines.channels.BufferOverflow
-import kotlinx.coroutines.channels.Channel
-
 Scribe.inscribe {
     shelves = listOf(NoteSaver { note ->
         println("[${note.level}] ${note.tag}: ${note.message}")
@@ -57,11 +54,20 @@ With the saver above, the log output looks like this:
 ## Track a Flow with `Scroll`
 
 `Scroll` is a mutable map (`MutableMap<String, JsonElement>`) that you seal into one wide event.
+Each `seal(...)` call emits a new `SealedScroll` using a snapshot of the scroll data at that moment.
+
+You can also merge other scrolls or nest them:
 
 ```kotlin
-import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.JsonPrimitive
+val base = Scribe.newScroll()
+base["gateway"] = JsonPrimitive("stripe")
 
+val checkout = Scribe.newScroll(id = "checkout-42")
+checkout.extend(base) // copies missing keys from base
+checkout.append("meta", mapOf("items" to JsonPrimitive(3)))
+```
+
+```kotlin
 val scroll = Scribe.newScroll(id = "checkout-42")
 scroll["gateway"] = JsonPrimitive("stripe")
 scroll["attempt"] = JsonPrimitive(1)
