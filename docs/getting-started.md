@@ -8,7 +8,7 @@ Use the library from shared code in your Kotlin Multiplatform module:
 kotlin {
     sourceSets {
         commonMain.dependencies {
-            implementation("com.rafambn:scribe:0.2.3")
+            implementation("com.rafambn:scribe:0.3.3")
         }
     }
 }
@@ -16,16 +16,17 @@ kotlin {
 
 ## Create a Minimal `Scribe`
 
-Initialize once with one or more savers, then hire the runtime with a `Channel<Entry>`.
+Create an object that extends `Scribe`, override its savers, then hire that
+object's runtime with a `Channel<Entry>`.
 
 ```kotlin
-Scribe.inscribe {
-    shelves = listOf(NoteSaver { note ->
+object AppScribe : Scribe() {
+    override val shelves: List<Saver<*>> = listOf(NoteSaver { note ->
         println("[${note.level}] ${note.tag}: ${note.message}")
     })
 }
 
-Scribe.hire(
+AppScribe.hire(
     channel = Channel(
         capacity = 256,
         onBufferOverflow = BufferOverflow.DROP_OLDEST,
@@ -38,7 +39,7 @@ Scribe.hire(
 Use `note(...)` for standalone events:
 
 ```kotlin
-Scribe.note(
+AppScribe.note(
     tag = "payments",
     message = "starting checkout",
     level = Urgency.INFO,
@@ -53,22 +54,26 @@ With the saver above, the log output looks like this:
 
 ## Track a Flow with `Scroll`
 
-`Scroll` is a mutable map (`MutableMap<String, JsonElement>`) that you seal into one wide event.
-Each `seal(...)` call emits a new `SealedScroll` using a snapshot of the scroll data at that moment.
+`Scroll` is a mutable, map-like context owned by the `Scribe` object that
+created it. Each `seal(...)` call emits a new `SealedScroll` through that
+object's runtime using a snapshot of the scroll data at that moment.
 
 You can also merge other scrolls or nest them:
 
 ```kotlin
-val base = Scribe.newScroll()
+val base = AppScribe.newScroll()
 base["gateway"] = JsonPrimitive("stripe")
 
-val checkout = Scribe.newScroll(id = "checkout-42")
+val checkout = AppScribe.newScroll(id = "checkout-42")
 checkout.extend(base) // copies missing keys from base
-checkout.append("meta", mapOf("items" to JsonPrimitive(3)))
+
+val meta = AppScribe.newScroll(id = "checkout-meta")
+meta["items"] = JsonPrimitive(3)
+checkout.append("meta", meta)
 ```
 
 ```kotlin
-val scroll = Scribe.newScroll(id = "checkout-42")
+val scroll = AppScribe.newScroll(id = "checkout-42")
 scroll["gateway"] = JsonPrimitive("stripe")
 scroll["attempt"] = JsonPrimitive(1)
 scroll["retry"] = JsonPrimitive(false)
@@ -78,6 +83,26 @@ scroll["cart"] = Json.encodeToJsonElement(
 )
 scroll.seal(success = true)
 ```
+
+## Use Multiple Runtimes
+
+Each object is independent. A library may define its own object, or an
+application may supply a configured object to a component.
+
+```kotlin
+object PaymentsScribe : Scribe() {
+    override val shelves: List<Saver<*>> = listOf(EntrySaver { sendPaymentsRecord(it) })
+}
+
+object AnalyticsScribe : Scribe() {
+    override val shelves: List<Saver<*>> = listOf(EntrySaver { sendAnalyticsRecord(it) })
+}
+
+PaymentsScribe.hire(channel = Channel(256))
+AnalyticsScribe.hire(channel = Channel(256))
+```
+
+Retiring `PaymentsScribe` does not stop `AnalyticsScribe`.
 
 The emitted `SealedScroll` shape:
 

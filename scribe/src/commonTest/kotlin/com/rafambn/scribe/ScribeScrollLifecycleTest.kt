@@ -16,7 +16,7 @@ class ScribeScrollLifecycleTest {
             val scribe = scribeWithScrollShelves(shelf)
             val scroll = scribe.newScroll()
             scroll["method"] = JsonPrimitive("card")
-            scroll.seal(success = true)
+            scroll.seal(scribe, success = true)
             shelf.awaitEvents(1)
             scribe.retire()
 
@@ -36,8 +36,8 @@ class ScribeScrollLifecycleTest {
 
             scroll["gateway"] = JsonPrimitive("stripe")
 
-            scroll.seal(success = false)
-            scroll.seal(success = true)
+            scroll.seal(scribe, success = false)
+            scroll.seal(scribe, success = true)
             shelf.awaitEvents(2)
             scribe.retire()
             val firstEvent = shelf.events.first()
@@ -58,12 +58,12 @@ class ScribeScrollLifecycleTest {
             val scroll1 = scribe.newScroll()
             val scroll2 = scribe.newScroll()
 
-            paymentService.pay("order1", scroll1)
+            paymentService.pay("order1", scroll1, scribe)
             assertFailsWith<IllegalStateException> {
-                paymentService.pay("order2", scroll2)
+                paymentService.pay("order2", scroll2, scribe)
             }
-            scroll1.seal(success = true)
-            scroll2.seal(success = true)
+            scroll1.seal(scribe, success = true)
+            scroll2.seal(scribe, success = true)
             shelf.awaitEvents(2)
             scribe.retire()
 
@@ -97,7 +97,7 @@ class ScribeScrollLifecycleTest {
             val scroll = scribe.newScroll(id = "session-42")
 
             scroll["operation"] = JsonPrimitive("sync")
-            scroll.seal()
+            scroll.seal(scribe)
             shelf.awaitEvents(1)
             scribe.retire()
 
@@ -126,7 +126,7 @@ class ScribeScrollLifecycleTest {
             val shelf = RecordingShelf()
             val scribe = scribeWithScrollShelves(shelf)
 
-            scribe.newScroll(id = "session-42").seal()
+            scribe.newScroll(id = "session-42").seal(scribe)
             shelf.awaitEvents(1)
 
             val reused = scribe.newScroll(id = "session-42")

@@ -34,6 +34,7 @@
 - Single-event logging with `note(...)` and contextual logging with `newScroll(...)`
 - Delivery hooks through `NoteSaver`, `ScrollSaver`, and `EntrySaver`
 - Scroll lifecycle enrichment through `Margin`
+- Independent `Scribe` objects for applications and imported libraries
 
 ## Setup
 
@@ -43,7 +44,7 @@ Add Scribe to your `commonMain` dependencies:
 kotlin {
     sourceSets {
         commonMain.dependencies {
-            implementation("com.rafambn:scribe:0.2.3")
+            implementation("com.rafambn:scribe:0.3.3")
         }
     }
 }
@@ -51,19 +52,19 @@ kotlin {
 
 ## Usage
 
-Initialize `Scribe`, hire the runtime, and emit a note:
+Create a `Scribe` object, hire its runtime, and emit a note:
 
 ```kotlin
-Scribe.inscribe {
-    shelves = listOf(
+object AppScribe : Scribe() {
+    override val shelves: List<Saver<*>> = listOf(
         NoteSaver { note ->
             println("[${note.level}] ${note.tag}: ${note.message}")
         }
     )
 }
-Scribe.hire(channel = Channel(capacity = 256))
+AppScribe.hire(channel = Channel(capacity = 256))
 
-Scribe.note(
+AppScribe.note(
     tag = "payments",
     message = "starting checkout",
     level = Urgency.INFO,
@@ -73,25 +74,25 @@ Scribe.note(
 Use a scroll when you need shared context for a longer flow:
 
 ```kotlin
-Scribe.inscribe {
-    shelves = listOf(
+object BillingScribe : Scribe() {
+    override val shelves: List<Saver<*>> = listOf(
         ScrollSaver { scroll -> println(scroll) }
     )
-    imprint = mapOf(
+    override val imprint = mapOf(
         "service" to JsonPrimitive("billing"),
         "environment" to JsonPrimitive("production"),
     )
 }
-Scribe.hire(channel = Channel(capacity = 256))
+BillingScribe.hire(channel = Channel(capacity = 256))
 
-val scroll = Scribe.newScroll(id = "checkout-42")
+val scroll = BillingScribe.newScroll(id = "checkout-42")
 scroll["gateway"] = JsonPrimitive("stripe")
 scroll["attempt"] = JsonPrimitive(1)
 scroll["retry"] = JsonPrimitive(false)
 scroll.seal(success = true)
 ```
 
-Each `seal(...)` call emits a separate `SealedScroll` snapshot, so sealing the same scroll more than once is allowed when you need multiple terminal records.
+Each `Scribe` object has independent configuration and delivery lifecycle. A `Scroll` is bound to the object that created it, so `scroll.seal()` always delivers through that runtime. Each `seal(...)` call emits a separate `SealedScroll` snapshot.
 
 Choose the saver that matches your output flow:
 

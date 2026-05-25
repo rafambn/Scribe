@@ -4,26 +4,15 @@ import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 
-/**
- * Mutable event context represented as a map and enriched with lifecycle extension functions.
- */
 typealias Scroll = MutableMap<String, JsonElement>
 
-/**
- * Stable unique identifier for this scroll.
- */
 val Scroll.id: String
     get() = this["scroll_id"]?.let { (it as? JsonPrimitive)?.content } ?: error("Invalid scroll id metadata.")
 
-/**
- * Seals this scroll and suspends until its [SealedScroll] is enqueued.
- *
- * Every call emits a new [SealedScroll] with a snapshot of the current data.
- */
-suspend fun Scroll.seal(success: Boolean = true): SealedScroll {
-    Scribe.config?.margins?.footer(this)
+suspend fun Scroll.seal(scribe: Scribe, success: Boolean = true): SealedScroll {
+    scribe.applyFooter(this)
     val result = SealedScroll(success = success, data = this.toMap())
-    Scribe.enqueue(result)
+    scribe.enqueue(result)
     return result
 }
 

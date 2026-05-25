@@ -10,13 +10,6 @@ import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonPrimitive
 
-enum class ConnectionState {
-    IDLE,
-    CHECKING,
-    CONNECTED,
-    FAILED,
-}
-
 @Serializable
 data class CheckoutMeta(
     @SerialName("item_count")
@@ -61,19 +54,19 @@ data class SerializationOrderSnapshot(
     val metadata: Map<String, String>,
 )
 
-typealias OpenObservePayload = Map<String, JsonElement>
+typealias ConsoleRecord = Map<String, JsonElement>
 
-fun payloadFromEntry(
+fun consoleRecordFromEntry(
     entry: Entry,
     demoName: String,
     platform: String,
     saverType: String,
     appVersion: String,
-    uploadedAt: Long,
-): OpenObservePayload =
+    recordedAt: Long,
+): ConsoleRecord =
     when (entry) {
         is Note -> linkedMapOf<String, JsonElement>(
-            "_timestamp" to JsonPrimitive(uploadedAt),
+            "_timestamp" to JsonPrimitive(recordedAt),
             "event_kind" to JsonPrimitive("note"),
             "demo_name" to JsonPrimitive(demoName),
             "platform" to JsonPrimitive(platform),
@@ -87,7 +80,7 @@ fun payloadFromEntry(
 
         is SealedScroll -> {
             val payload = linkedMapOf<String, JsonElement>()
-            payload["_timestamp"] = JsonPrimitive(uploadedAt)
+            payload["_timestamp"] = JsonPrimitive(recordedAt)
             payload["event_kind"] = JsonPrimitive("scroll")
             payload["demo_name"] = JsonPrimitive(stringField(entry.data, "demo_name") ?: demoName)
             payload["platform"] = JsonPrimitive(platform)
@@ -118,38 +111,35 @@ data class TimelineItem(
 data class ShowcaseUiState(
     val isBusy: Boolean = false,
     val busyLabel: String = "",
-    val connectionState: ConnectionState = ConnectionState.IDLE,
-    val connectionMessage: String = "OpenObserve has not been checked yet.",
     val statusMessage: String = "Ready to run demo scenarios.",
     val isRetired: Boolean = false,
-    val streamName: String = "scribe_demo",
     val activeScrollIds: List<String> = emptyList(),
-    val lastPayload: String = "",
-    val lastUploadMessage: String = "No uploads yet.",
+    val lastRecord: String = "",
+    val outputMessage: String = "Records are written to the application console.",
     val saverErrors: List<String> = emptyList(),
     val timeline: List<TimelineItem> = emptyList(),
     val ignitionMessage: String = "The onIgnition hook is wired, but the demo does not crash itself to trigger it.",
 )
 
-fun recordSummary(record: OpenObservePayload): String =
+fun recordSummary(record: ConsoleRecord): String =
     when (payloadEventKind(record)) {
         "note" -> "${record.tag ?: "note"} ${record.level ?: ""}".trim()
         else -> "${record.scroll_id ?: "scroll"} success=${record.success}"
     }
 
-fun payloadEventKind(record: OpenObservePayload): String =
+fun payloadEventKind(record: ConsoleRecord): String =
     record["event_kind"]?.jsonPrimitive?.contentOrNull ?: "unknown"
 
-private val OpenObservePayload.tag: String?
+private val ConsoleRecord.tag: String?
     get() = this["tag"]?.jsonPrimitive?.contentOrNull
 
-private val OpenObservePayload.level: String?
+private val ConsoleRecord.level: String?
     get() = this["level"]?.jsonPrimitive?.contentOrNull
 
-private val OpenObservePayload.scroll_id: String?
+private val ConsoleRecord.scroll_id: String?
     get() = this["scroll_id"]?.jsonPrimitive?.contentOrNull
 
-private val OpenObservePayload.success: String?
+private val ConsoleRecord.success: String?
     get() = this["success"]?.jsonPrimitive?.contentOrNull
 
 fun sampleImprint(platform: String): Map<String, JsonElement> = mapOf(

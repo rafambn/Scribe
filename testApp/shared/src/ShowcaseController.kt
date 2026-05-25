@@ -23,6 +23,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.encodeToJsonElement
@@ -35,16 +36,13 @@ class ShowcaseController {
         prettyPrintIndent = "  "
         encodeDefaults = true
     }
-    private val config = OpenObserveConfig()
-    private val client = OpenObserveClient(config, json)
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private val gate = Mutex()
     private val appVersion = "testApp-showcase"
     private val platform = platformName()
     private val activeScrolls = linkedMapOf<String, Scroll>()
-    private var scribeInitialized = false
     private var overflowMode = false
-    private var uploadedEvents = 0
+    private var printedEvents = 0
     private lateinit var mainScribe: Scribe
 
     private val defaultMargin = object : Margin {
@@ -61,42 +59,11 @@ class ShowcaseController {
         }
     }
 
-    private val _state = MutableStateFlow(
-        ShowcaseUiState(
-            streamName = config.stream,
-            connectionMessage = "Configured for ${config.baseUrl} and stream ${config.stream}.",
-        ),
-    )
+    private val _state = MutableStateFlow(ShowcaseUiState())
     val state: StateFlow<ShowcaseUiState> = _state.asStateFlow()
 
     init {
-        mainScribe = createMainScribe()
-        refreshConnection()
-    }
-
-    fun refreshConnection() {
-        scope.launch {
-            _state.update {
-                it.copy(
-                    connectionState = ConnectionState.CHECKING,
-                    connectionMessage = "Checking ${config.baseUrl}...",
-                )
-            }
-            val result = client.ping()
-            _state.update {
-                if (result.isSuccess) {
-                    it.copy(
-                        connectionState = ConnectionState.CONNECTED,
-                        connectionMessage = result.getOrThrow(),
-                    )
-                } else {
-                    it.copy(
-                        connectionState = ConnectionState.FAILED,
-                        connectionMessage = result.exceptionOrNull()?.message ?: "Failed to reach OpenObserve.",
-                    )
-                }
-            }
-        }
+        mainScribe = createMainScribe().also(::hireMainScribe)
     }
 
     fun runNoteScenario() = launchScenario("Suspending note demo") {
@@ -106,7 +73,7 @@ class ShowcaseController {
             message = "Started checkout for premium customer",
             level = Urgency.INFO,
         )
-        updateStatus("Ran note(...): a single INFO event went through EntrySaver into the unified stream.")
+        updateStatus("Ran note(...): a single INFO event was printed through EntrySaver.")
     }
 
     fun runFlingNoteScenario() = launchScenario("Second note demo") {
@@ -125,14 +92,14 @@ class ShowcaseController {
         scroll["demo_name"] = JsonPrimitive("string_template_render")
         scroll["message"] = JsonPrimitive("error on order_id=\$order_id")
         scroll["order_id"] = JsonPrimitive(555)
-        sealScroll(scroll, success = true)
+        sealScroll(scroll, scribe, success = true)
         appendTimeline(
             title = "Template message preview",
             detail = "Sent scroll with {message: \"error on order_id=\$order_id\", order_id: 555}.",
             payload = "",
             success = true,
         )
-        updateStatus("Ran string-template scroll demo; inspect message + order_id rendering in OpenObserve.")
+        updateStatus("Ran string-template scroll demo; inspect message + order_id in console output.")
     }
 
     fun runCheckoutScenario() = launchScenario("Wide-event scroll demo") {
@@ -151,7 +118,7 @@ class ShowcaseController {
                 featureFlag = "wide-events",
             ),
         )
-        sealScroll(scroll, success = true)
+        sealScroll(scroll, scribe, success = true)
         updateStatus("Ran newScroll + map writes + seal for a wide checkout event.")
     }
 
@@ -173,7 +140,7 @@ class ShowcaseController {
             payload = "",
             success = true,
         )
-        sealScroll(scroll, success = true)
+        sealScroll(scroll, scribe, success = true)
         updateStatus("Ran custom-id scroll demo with map reads/removals and local active-scroll tracking.")
     }
 
@@ -187,6 +154,7 @@ class ShowcaseController {
         scroll["failure_reason"] = JsonPrimitive("downstream retry scheduled")
         sealScroll(
             scroll,
+            scribe,
             success = false,
         )
         delay(250)
@@ -213,10 +181,10 @@ class ShowcaseController {
                 installments = 3,
                 currency = "USD",
             ),
-            tags = listOf("openobserve", "serialization-test", "nested-object"),
+            tags = listOf("console", "serialization-test", "nested-object"),
             metadata = mapOf(
-                "channel" to "web",
-                "experiment" to "openobserve-json-object",
+                "channel" to "stdout",
+                "experiment" to "console-json-object",
             ),
         )
 
@@ -232,8 +200,8 @@ class ShowcaseController {
             "order_snapshot.order_id,order_snapshot.buyer.tier,order_snapshot.line_items[0].sku,order_snapshot.metadata.channel,order_id,buyer_tier,primary_sku,channel,order_item_count,order_tag_count",
         )
 
-        sealScroll(scroll, success = true)
-        updateStatus("Ran JSON serialization demo with a nested object payload for OpenObserve inspection.")
+        sealScroll(scroll, scribe, success = true)
+        updateStatus("Ran JSON serialization demo with a nested object payload for console inspection.")
     }
 
     fun runEntrySaverScenario() = launchScenario("Unified EntrySaver demo") {
@@ -247,13 +215,13 @@ class ShowcaseController {
         scroll["demo_name"] = JsonPrimitive("entry_saver_demo")
         scroll["role"] = JsonPrimitive("support")
         scroll["elevated_access"] = JsonPrimitive(true)
-        sealScroll(scroll, success = true)
+        sealScroll(scroll, scribe, success = true)
         updateStatus("Ran a mixed note + scroll demo through one EntrySaver path.")
     }
 
     fun runOverflowScenario() = launchScenario("Overflow demo") {
         val scribe = activeMainScribe("overflow_demo") ?: return@launchScenario
-        val baseline = uploadedEvents
+        val baseline = printedEvents
         val attempted = 12
 
         overflowMode = true
@@ -267,7 +235,7 @@ class ShowcaseController {
         delay(1800)
         overflowMode = false
 
-        val delivered = uploadedEvents - baseline
+        val delivered = printedEvents - baseline
         appendTimeline(
             title = "Overflow result",
             detail = "Attempted $attempted notes with channel capacity $MAIN_CHANNEL_CAPACITY and DROP_OLDEST; delivered $delivered.",
@@ -303,7 +271,7 @@ class ShowcaseController {
             payload = "",
             success = true,
         )
-        updateStatus("The shared demo Scribe is retired. Press Recreate Scribe before sending more messages.")
+        updateStatus("The shared demo Scribe is retired. Press Re-hire Scribe before sending more messages.")
     }
 
     fun runPlanRetireScenario() = launchScenario("retire() with backlog demo") {
@@ -324,7 +292,7 @@ class ShowcaseController {
             payload = "",
             success = true,
         )
-        updateStatus("The shared demo Scribe is retired after draining queued work. Press Recreate Scribe to continue.")
+        updateStatus("The shared demo Scribe is retired after draining queued work. Press Re-hire Scribe to continue.")
     }
 
     fun wireIgnitionScenario() = launchScenario("onIgnition wiring") {
@@ -342,11 +310,11 @@ class ShowcaseController {
         updateStatus("Configured onIgnition safely without terminating the showcase process.")
     }
 
-    fun recreateMainScribe() = launchScenario("Recreate Scribe") {
+    fun rehireMainScribe() = launchScenario("Re-hire Scribe") {
         if (!_state.value.isRetired) {
             updateStatus("The shared demo Scribe is already active.")
             appendTimeline(
-                title = "Recreate Scribe",
+                title = "Re-hire Scribe",
                 detail = "The shared demo Scribe was already active, so no recreation was needed.",
                 payload = "",
                 success = true,
@@ -354,13 +322,13 @@ class ShowcaseController {
             return@launchScenario
         }
 
-        mainScribe = createMainScribe()
+        hireMainScribe(mainScribe)
         _state.update { it.copy(isRetired = false) }
         refreshActiveScrolls()
-        updateStatus("The shared demo Scribe was recreated and can send messages again.")
+        updateStatus("The shared demo Scribe was re-hired and can send messages again.")
         appendTimeline(
-            title = "Recreate Scribe",
-            detail = "A new shared demo Scribe runtime was hired after retirement.",
+            title = "Re-hire Scribe",
+            detail = "The shared demo Scribe object was hired again after retirement.",
             payload = "",
             success = true,
         )
@@ -368,7 +336,7 @@ class ShowcaseController {
 
     fun close() {
         scope.launch {
-            runCatching { Scribe.retire() }
+            runCatching { mainScribe.retire() }
         }
     }
 
@@ -395,7 +363,7 @@ class ShowcaseController {
 
     private fun activeMainScribe(demoName: String): Scribe? {
         if (_state.value.isRetired) {
-            val message = "The shared demo Scribe is retired. Press Recreate Scribe before running $demoName."
+            val message = "The shared demo Scribe is retired. Press Re-hire Scribe before running $demoName."
             updateStatus(message)
             appendTimeline(
                 title = "Scribe retired",
@@ -408,28 +376,27 @@ class ShowcaseController {
         return mainScribe
     }
 
-    private fun createMainScribe(): Scribe {
-        if (!scribeInitialized) {
-            Scribe.inscribe {
-                shelves = listOf(
-                    failingEntrySaver(),
-                    entryUploadSaver("shared_session", "EntrySaver"),
-                )
-                imprint = sampleImprint(platform) + mapOf(
-                    "stream" to JsonPrimitive(config.stream),
-                    "session_kind" to JsonPrimitive("persistent-demo"),
-                )
-                margins = defaultMargin
-                onIgnition = { throwable ->
-                    _state.update {
-                        it.copy(ignitionMessage = "onIgnition captured ${throwable.message}")
-                    }
+    private fun createMainScribe(): Scribe =
+        object : Scribe() {
+            override val shelves = listOf(
+                failingEntrySaver(),
+                consoleEntrySaver("shared_session", "EntrySaver"),
+            )
+            override val imprint = sampleImprint(platform) + mapOf(
+                "output" to JsonPrimitive("console"),
+                "session_kind" to JsonPrimitive("persistent-demo"),
+            )
+            override val margins = defaultMargin
+            override val onIgnition: (Throwable) -> Unit = { throwable ->
+                println("Scribe onIgnition: ${throwable.message ?: throwable}")
+                _state.update {
+                    it.copy(ignitionMessage = "onIgnition captured ${throwable.message}")
                 }
             }
-            scribeInitialized = true
         }
 
-        Scribe.hire(
+    private fun hireMainScribe(scribe: Scribe) {
+        scribe.hire(
             scope = scope,
             channel = Channel(capacity = MAIN_CHANNEL_CAPACITY, onBufferOverflow = BufferOverflow.DROP_OLDEST),
             onSaver = { saver, entry, error ->
@@ -438,7 +405,6 @@ class ShowcaseController {
                 )
             },
         )
-        return Scribe
     }
 
     private fun failingEntrySaver(): EntrySaver = EntrySaver { entry ->
@@ -447,14 +413,14 @@ class ShowcaseController {
         }
     }
 
-    private fun entryUploadSaver(
+    private fun consoleEntrySaver(
         demoName: String,
         saverType: String,
     ): EntrySaver = EntrySaver { entry ->
-        uploadRecord(entry, demoName, saverType)
+        printRecord(entry, demoName, saverType)
     }
 
-    private suspend fun uploadRecord(
+    private suspend fun printRecord(
         entry: Entry,
         demoName: String,
         saverType: String,
@@ -463,30 +429,29 @@ class ShowcaseController {
             delay(220)
         }
 
-        val record = payloadFromEntry(
+        val record = consoleRecordFromEntry(
             entry = entry,
             demoName = demoName,
             platform = platform,
             saverType = saverType,
             appVersion = appVersion,
-            uploadedAt = currentEpochMillis(),
+            recordedAt = currentEpochMillis(),
         )
 
-        uploadedEvents += 1
-        val payload = client.prettyRecord(record)
-        val result = client.upload(record)
+        printedEvents += 1
+        val payload = json.encodeToString(JsonObject.serializer(), JsonObject(record))
+        println(payload)
         _state.update {
             it.copy(
-                lastPayload = payload,
-                lastUploadMessage = result.getOrElse { error -> error.message ?: "Upload failed." },
-                connectionState = if (result.isSuccess) ConnectionState.CONNECTED else ConnectionState.FAILED,
+                lastRecord = payload,
+                outputMessage = "Printed ${payloadEventKind(record)} record to the console.",
             )
         }
         appendTimeline(
             title = "${payloadEventKind(record)} via $saverType",
-            detail = "${recordSummary(record)}. ${result.getOrElse { error -> error.message ?: "Upload failed." }}",
+            detail = "${recordSummary(record)}. Printed to console.",
             payload = payload,
-            success = result.isSuccess,
+            success = true,
         )
     }
 
@@ -499,6 +464,7 @@ class ShowcaseController {
     }
 
     private fun appendSaverError(message: String) {
+        println(message)
         _state.update {
             it.copy(
                 saverErrors = listOf(message) + it.saverErrors.take(5),
@@ -535,8 +501,8 @@ class ShowcaseController {
         return scroll
     }
 
-    private suspend fun sealScroll(scroll: Scroll, success: Boolean) {
-        scroll.seal(success = success)
+    private suspend fun sealScroll(scroll: Scroll, scribe: Scribe, success: Boolean) {
+        scroll.seal(scribe, success = success)
         activeScrolls.remove(scroll.id)
         refreshActiveScrolls()
     }

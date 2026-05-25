@@ -13,7 +13,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -64,8 +63,8 @@ fun Screen() {
                     .padding(20.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp),
             ) {
-                HeroCard(state)
-                StatusCard(state, controller)
+                HeroCard()
+                StatusCard(state)
                 ActionGroup(
                     title = "Notes",
                     description = "Standalone events through the suspending note(...) API.",
@@ -86,8 +85,8 @@ fun Screen() {
                     enabled = !state.isBusy,
                 )
                 ActionGroup(
-                    title = "OpenObserve Rendering Checks",
-                    description = "Validate nested JSON object serialization and string-template rendering in logs.",
+                    title = "Console Rendering Checks",
+                    description = "Validate nested JSON object serialization and string-template rendering in console records.",
                     buttons = listOf(
                         "JSON object serialization" to controller::runJsonSerializationScenario,
                         "String template message" to controller::runStringTemplateScenario,
@@ -108,7 +107,7 @@ fun Screen() {
                     title = "Shutdown And Safety",
                     description = "Use retire() shutdown flows and wire the onIgnition callback safely.",
                     buttons = listOf(
-                        "Recreate Scribe" to controller::recreateMainScribe,
+                        "Re-hire Scribe" to controller::rehireMainScribe,
                         "retire() (light queue)" to controller::runRetireScenario,
                         "retire() with backlog" to controller::runPlanRetireScenario,
                         "Wire onIgnition" to controller::wireIgnitionScenario,
@@ -122,7 +121,7 @@ fun Screen() {
 }
 
 @Composable
-private fun HeroCard(state: ShowcaseUiState) {
+private fun HeroCard() {
     Card(
         shape = RoundedCornerShape(28.dp),
         colors = CardDefaults.cardColors(containerColor = Color(0xFF14213D)),
@@ -132,13 +131,13 @@ private fun HeroCard(state: ShowcaseUiState) {
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             Text(
-                text = "Scribe + OpenObserve",
+                text = "Scribe Console Showcase",
                 color = Color(0xFFFFF7E6),
                 style = MaterialTheme.typography.headlineMedium,
                 fontWeight = FontWeight.Bold,
             )
             Text(
-                text = "Guided demos for notes, wide events, margins, queue delivery, and saver behavior. Everything uploads into the ${state.streamName} stream.",
+                text = "Guided demos for notes, wide events, margins, queue delivery, and saver behavior. Every delivered record is printed to the console.",
                 color = Color(0xFFE7ECEF),
                 style = MaterialTheme.typography.bodyLarge,
             )
@@ -152,14 +151,14 @@ private fun HeroCard(state: ShowcaseUiState) {
 }
 
 @Composable
-private fun StatusCard(state: ShowcaseUiState, controller: ShowcaseController) {
+private fun StatusCard(state: ShowcaseUiState) {
     Card(shape = RoundedCornerShape(24.dp)) {
         Column(
             modifier = Modifier.padding(18.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            Text("OpenObserve Status", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
-            Text(state.connectionMessage, style = MaterialTheme.typography.bodyMedium)
+            Text("Console Output", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
+            Text(state.outputMessage, style = MaterialTheme.typography.bodyMedium)
             Text("Status: ${state.statusMessage}", style = MaterialTheme.typography.bodyMedium)
             Text(
                 "Scribe instance: ${if (state.isRetired) "retired" else "active"}",
@@ -180,15 +179,10 @@ private fun StatusCard(state: ShowcaseUiState, controller: ShowcaseController) {
                     color = Color(0xFF9C2F2F),
                 )
             }
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                Button(onClick = controller::refreshConnection, enabled = !state.isBusy) {
-                    Text("Refresh OpenObserve")
-                }
-                if (state.isBusy) {
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
-                        Text(state.busyLabel, style = MaterialTheme.typography.bodyMedium)
-                    }
+            if (state.isBusy) {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
+                    Text(state.busyLabel, style = MaterialTheme.typography.bodyMedium)
                 }
             }
         }
@@ -230,15 +224,15 @@ private fun TimelineCard(state: ShowcaseUiState) {
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             Text("Timeline", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
-            Text("Last upload: ${state.lastUploadMessage}", style = MaterialTheme.typography.bodyMedium)
-            if (state.lastPayload.isNotBlank()) {
+            Text("Last console record", style = MaterialTheme.typography.bodyMedium)
+            if (state.lastRecord.isNotBlank()) {
                 Surface(
                     color = Color(0xFF101820),
                     shape = RoundedCornerShape(18.dp),
                 ) {
                     SelectionContainer {
                         Text(
-                            text = state.lastPayload,
+                            text = state.lastRecord,
                             modifier = Modifier.padding(14.dp),
                             color = Color(0xFFE9F1F7),
                             fontFamily = FontFamily.Monospace,

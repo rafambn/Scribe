@@ -16,7 +16,7 @@ class ScribeDataSerializationTest {
             val scroll = scribe.newScroll()
 
             scroll["meta"] = Json.encodeToJsonElement(GatewayMeta.serializer(), GatewayMeta(retries = 2))
-            scroll.seal()
+            scroll.seal(scribe)
             shelf.awaitEvents(1)
             scribe.retire()
 
@@ -36,7 +36,7 @@ class ScribeDataSerializationTest {
             scroll["attempt"] = JsonPrimitive(3)
             scroll["retry"] = JsonPrimitive(false)
             scroll["meta"] = Json.encodeToJsonElement(GatewayMeta.serializer(), GatewayMeta(retries = 2))
-            scroll.seal()
+            scroll.seal(scribe)
             shelf.awaitEvents(1)
             scribe.retire()
 
@@ -93,7 +93,7 @@ class ScribeDataSerializationTest {
             val scroll = scribe.newScroll()
 
             scroll["key"] = JsonPrimitive("value")
-            scroll.seal()
+            scroll.seal(scribe)
             assertEquals(JsonPrimitive("value"), scroll.remove("key"))
             shelf.awaitEvents(1)
             scribe.retire()

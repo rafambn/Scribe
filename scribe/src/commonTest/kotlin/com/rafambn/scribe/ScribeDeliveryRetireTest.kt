@@ -20,13 +20,40 @@ import kotlin.test.assertTrue
 
 class ScribeDeliveryRetireTest {
     @Test
+    fun separate_scribe_instances_deliver_and_retire_independently() {
+        runSuspend {
+            val firstShelf = RecordingShelf()
+            val secondShelf = RecordingShelf()
+            val first = scribeWithScrollShelves(firstShelf)
+            val second = scribeWithScrollShelves(secondShelf)
+
+            first.newScroll(id = "first-runtime").seal(first)
+            second.newScroll(id = "second-runtime").seal(second)
+            firstShelf.awaitEvents(1)
+            secondShelf.awaitEvents(1)
+
+            first.retire()
+            second.newScroll(id = "second-still-active").seal(second)
+            secondShelf.awaitEvents(1)
+            second.retire()
+
+            assertEquals(1, firstShelf.events.size)
+            assertEquals(2, secondShelf.events.size)
+            assertEquals(
+                "second-still-active",
+                secondShelf.events.last().data["scroll_id"]?.jsonPrimitive?.content,
+            )
+        }
+    }
+
+    @Test
     fun events_are_dispatched_to_multiple_sinks() {
         runSuspend {
             val shelf1 = RecordingShelf()
             val shelf2 = RecordingShelf()
             val scribe = scribeWithScrollShelves(shelf1, shelf2)
 
-            scribe.newScroll(id = "scroll-a").seal()
+            scribe.newScroll(id = "scroll-a").seal(scribe)
             shelf1.awaitEvents(1)
             shelf2.awaitEvents(1)
             scribe.retire()
@@ -47,7 +74,7 @@ class ScribeDeliveryRetireTest {
             )
 
             scribe.note(tag = "payments", message = "started", level = Urgency.INFO, timestamp = 100L)
-            scribe.newScroll(id = "scroll-1").seal()
+            scribe.newScroll(id = "scroll-1").seal(scribe)
             scrollShelf.awaitEvents(1)
             noteSaver.awaitEvents(1)
             allSaver.awaitEvents(2)
@@ -68,7 +95,7 @@ class ScribeDeliveryRetireTest {
                 channel = Channel(capacity = 4, onBufferOverflow = BufferOverflow.DROP_OLDEST),
             )
 
-            scribe.newScroll(id = "slow").seal()
+            scribe.newScroll(id = "slow").seal(scribe)
             assertEquals(0, shelf.events.size)
 
             gate.complete(Unit)
@@ -84,9 +111,9 @@ class ScribeDeliveryRetireTest {
             val shelf = RecordingShelf()
             val scribe = scribeWithScrollShelves(shelf)
 
-            scribe.newScroll(id = "first").seal()
+            scribe.newScroll(id = "first").seal(scribe)
             delay(500)
-            scribe.newScroll(id = "second").seal()
+            scribe.newScroll(id = "second").seal(scribe)
             shelf.awaitEvents(2)
             scribe.retire()
 
@@ -121,7 +148,7 @@ class ScribeDeliveryRetireTest {
             val shelf = BlockingShelf(gate, firstWriteStarted)
             val scribe = scribeWithScrollShelves(shelf)
 
-            scribe.newScroll(id = "in-flight").seal()
+            scribe.newScroll(id = "in-flight").seal(scribe)
             firstWriteStarted.await()
             val retireScope = CoroutineScope(Dispatchers.Default)
             val retireJob = retireScope.launch { scribe.retire() }
@@ -154,7 +181,7 @@ class ScribeDeliveryRetireTest {
             val shelf = BlockingShelf(gate, firstWriteStarted)
             val scribe = scribeWithScrollShelves(shelf)
 
-            scribe.newScroll(id = "flush-me").seal()
+            scribe.newScroll(id = "flush-me").seal(scribe)
             firstWriteStarted.await()
 
             val retireScope = CoroutineScope(Dispatchers.Default)

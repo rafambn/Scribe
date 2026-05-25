@@ -18,7 +18,7 @@ data class SealedScroll(
 ): Entry
 
 /**
- * Lightweight standalone log message emitted through [Scribe.note].
+ * Lightweight standalone log message emitted through a [Scribe] instance.
  */
 @Serializable
 data class Note(
