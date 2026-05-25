@@ -146,11 +146,7 @@ class ShowcaseViewModel {
         scroll["warehouse"] = JsonPrimitive("gru-1")
         scroll["cache_hit"] = JsonPrimitive(false)
         scroll["failure_reason"] = JsonPrimitive("downstream retry scheduled")
-        sealScroll(
-            scroll,
-            AppScribe,
-            success = false,
-        )
+        sealScroll(scroll, AppScribe, success = false)
         delay(250)
         updateStatus("Ran Margin header/footer hooks with seal(success = false).")
     }
@@ -426,7 +422,7 @@ class ShowcaseViewModel {
         return scroll
     }
 
-    private fun sealScroll(scroll: Scroll, scribe: Scribe, success: Boolean) {
+    private suspend fun sealScroll(scroll: Scroll, scribe: Scribe, success: Boolean) {
         scroll.seal(scribe, success = success)
         activeScrolls.remove(scroll.id)
         refreshActiveScrolls()

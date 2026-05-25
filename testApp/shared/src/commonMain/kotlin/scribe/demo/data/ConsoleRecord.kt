@@ -44,7 +44,7 @@ fun consoleRecordFromEntry(
             payload["success"] = JsonPrimitive(entry.success)
             stringField(entry.data, "message")?.let { payload["message"] = JsonPrimitive(it) }
             entry.data["order_id"]?.let { payload["order_id"] = it }
-                ?: entry.data["orderId"]?.let { payload["order_id"] = it }
+                ?: entry.data["ordemId"]?.let { payload["order_id"] = it }
             entry.data.forEach { (key, value) ->
                 payload.putIfAbsent(key, value)
             }

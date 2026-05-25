@@ -1,6 +1,0 @@
-product:
-  type: ios/app
-
-apply:
-  - ../compose.module-template.yaml
-  - ../app.module-template.yaml
