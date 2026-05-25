@@ -1,14 +1,15 @@
 package com.rafambn.scribe
 
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonPrimitive
 
@@ -132,8 +133,8 @@ abstract class Scribe {
         val queue = activeQueue
         val runningProcessor = processorJob
         if (queue == null && runningProcessor == null) return
-        queue?.close()
         activeQueue = null
+        queue?.close()
         val callerJob = currentCoroutineContext()[Job]
         if (runningProcessor != null && !isProcessorFamily(runningProcessor, callerJob)) {
             runningProcessor.join()
@@ -156,15 +157,15 @@ abstract class Scribe {
     }
 
     /**
-     * Emits a [Note] and suspends until it is enqueued.
+     * Emits a [Note] immediately, blocking only when the channel buffer is full under [BufferOverflow.SUSPEND][kotlinx.coroutines.channels.BufferOverflow.SUSPEND].
      *
      * @param tag logical source/category for the note.
      * @param message note text payload.
      * @param level severity level for the note.
      * @param timestamp epoch milliseconds associated with the note.
      */
-    suspend fun note(tag: String, message: String, level: Urgency = Urgency.INFO, timestamp: Long = nowEpochMs()) {
-        requireActiveQueue().send(
+    fun note(tag: String, message: String, level: Urgency = Urgency.INFO, timestamp: Long = nowEpochMs()) {
+        requireActiveQueue().trySendBlocking(
             Note(
                 tag = tag,
                 message = message,
@@ -182,7 +183,15 @@ abstract class Scribe {
         return activeQueue ?: throw IllegalStateException("This Scribe runtime is not active. Call hire(...) first.")
     }
 
-    internal suspend fun enqueue(entry: Entry) {
-        requireActiveQueue().send(entry)
+    internal fun enqueue(entry: Entry) {
+        requireActiveQueue().trySendBlocking(entry)
+    }
+
+    private fun <E> Channel<E>.trySendBlocking(element: E) {
+        val result = trySend(element)
+        if (result.isSuccess) return
+        runBlocking {
+            runCatching { send(element) }
+        }
     }
 }

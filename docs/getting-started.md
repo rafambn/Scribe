@@ -81,7 +81,7 @@ scroll["cart"] = Json.encodeToJsonElement(
     CheckoutMeta.serializer(),
     CheckoutMeta(itemCount = 3, subtotalCents = 249_900, featureFlag = "wide-events"),
 )
-scroll.seal(success = true)
+scroll.seal(AppScribe, success = true)
 ```
 
 ## Use Multiple Runtimes

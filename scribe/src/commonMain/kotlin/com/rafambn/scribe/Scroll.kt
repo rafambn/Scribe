@@ -9,7 +9,7 @@ typealias Scroll = MutableMap<String, JsonElement>
 val Scroll.id: String
     get() = this["scroll_id"]?.let { (it as? JsonPrimitive)?.content } ?: error("Invalid scroll id metadata.")
 
-suspend fun Scroll.seal(scribe: Scribe, success: Boolean = true): SealedScroll {
+fun Scroll.seal(scribe: Scribe, success: Boolean = true): SealedScroll {
     scribe.applyFooter(this)
     val result = SealedScroll(success = success, data = this.toMap())
     scribe.enqueue(result)

@@ -1,8 +1,6 @@
-package scribe.demo
+package scribe.demo.viewmodel
 
 import com.rafambn.scribe.Entry
-import com.rafambn.scribe.EntrySaver
-import com.rafambn.scribe.Margin
 import com.rafambn.scribe.Note
 import com.rafambn.scribe.Scroll
 import com.rafambn.scribe.Scribe
@@ -12,8 +10,6 @@ import com.rafambn.scribe.seal
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.channels.BufferOverflow
-import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -25,12 +21,22 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
-import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.encodeToJsonElement
-import kotlinx.serialization.json.jsonPrimitive
-import kotlinx.serialization.json.longOrNull
+import scribe.demo.currentEpochMillis
+import scribe.demo.data.CheckoutMeta
+import scribe.demo.data.SerializationBuyer
+import scribe.demo.data.SerializationLineItem
+import scribe.demo.data.SerializationOrderSnapshot
+import scribe.demo.data.SerializationPayment
+import scribe.demo.data.ShowcaseUiState
+import scribe.demo.data.TimelineItem
+import scribe.demo.data.consoleRecordFromEntry
+import scribe.demo.data.payloadEventKind
+import scribe.demo.data.recordSummary
+import scribe.demo.platformName
+import scribe.demo.scribe.AppScribe
 
-class ShowcaseController {
+class ShowcaseViewModel {
     private val json = Json {
         prettyPrint = true
         prettyPrintIndent = "  "
@@ -41,34 +47,27 @@ class ShowcaseController {
     private val appVersion = "testApp-showcase"
     private val platform = platformName()
     private val activeScrolls = linkedMapOf<String, Scroll>()
-    private var overflowMode = false
     private var printedEvents = 0
-    private lateinit var mainScribe: Scribe
-
-    private val defaultMargin = object : Margin {
-        override fun header(scroll: Scroll) {
-            scroll["started_at"] = JsonPrimitive(currentEpochMillis())
-            scroll["platform_session"] = JsonPrimitive(platform)
-        }
-
-        override fun footer(scroll: Scroll) {
-            val startedAt = scroll["started_at"]?.jsonPrimitive?.longOrNull ?: return
-            val completedAt = currentEpochMillis()
-            scroll["completed_at"] = JsonPrimitive(completedAt)
-            scroll["elapsed_ms"] = JsonPrimitive(completedAt - startedAt)
-        }
-    }
 
     private val _state = MutableStateFlow(ShowcaseUiState())
     val state: StateFlow<ShowcaseUiState> = _state.asStateFlow()
 
     init {
-        mainScribe = createMainScribe().also(::hireMainScribe)
+        AppScribe.onRecord = { entry ->
+            handleRecord(entry)
+        }
+        AppScribe.hireDefault(
+            scope = scope,
+            onSaver = { saver, entry, error ->
+                appendSaverError(
+                    "Saver failure in ${saver::class.simpleName ?: "Saver"} for ${entryKind(entry)}: ${error.message ?: error}",
+                )
+            },
+        )
     }
 
     fun runNoteScenario() = launchScenario("Suspending note demo") {
-        val scribe = activeMainScribe("single_note") ?: return@launchScenario
-        scribe.note(
+        AppScribe.note(
             tag = "checkout",
             message = "Started checkout for premium customer",
             level = Urgency.INFO,
@@ -77,8 +76,7 @@ class ShowcaseController {
     }
 
     fun runFlingNoteScenario() = launchScenario("Second note demo") {
-        val scribe = activeMainScribe("second_note") ?: return@launchScenario
-        scribe.note(
+        AppScribe.note(
             tag = "queue",
             message = "Queued retry audit event through the suspending API",
             level = Urgency.DEBUG,
@@ -87,12 +85,11 @@ class ShowcaseController {
     }
 
     fun runStringTemplateScenario() = launchScenario("String template scroll demo") {
-        val scribe = activeMainScribe("string_template_render") ?: return@launchScenario
-        val scroll = openScroll(scribe, id = "template-render-1")
+        val scroll = openScroll(AppScribe, id = "template-render-1")
         scroll["demo_name"] = JsonPrimitive("string_template_render")
         scroll["message"] = JsonPrimitive("error on order_id=\$order_id")
         scroll["order_id"] = JsonPrimitive(555)
-        sealScroll(scroll, scribe, success = true)
+        sealScroll(scroll, AppScribe, success = true)
         appendTimeline(
             title = "Template message preview",
             detail = "Sent scroll with {message: \"error on order_id=\$order_id\", order_id: 555}.",
@@ -103,8 +100,7 @@ class ShowcaseController {
     }
 
     fun runCheckoutScenario() = launchScenario("Wide-event scroll demo") {
-        val scribe = activeMainScribe("checkout_scroll") ?: return@launchScenario
-        val scroll = openScroll(scribe)
+        val scroll = openScroll(AppScribe)
         scroll["demo_name"] = JsonPrimitive("checkout_scroll")
         scroll["order_id"] = JsonPrimitive("order-42")
         scroll["gateway"] = JsonPrimitive("stripe")
@@ -118,21 +114,20 @@ class ShowcaseController {
                 featureFlag = "wide-events",
             ),
         )
-        sealScroll(scroll, scribe, success = true)
+        sealScroll(scroll, AppScribe, success = true)
         updateStatus("Ran newScroll + map writes + seal for a wide checkout event.")
     }
 
     fun runInspectionScenario() = launchScenario("Scroll map inspection demo") {
-        val scribe = activeMainScribe("inspection_scroll") ?: return@launchScenario
-        val scroll = openScroll(scribe, id = "ops-demo-42")
+        val scroll = openScroll(AppScribe, id = "ops-demo-42")
         scroll["demo_name"] = JsonPrimitive("inspection_scroll")
         scroll["phase"] = JsonPrimitive("validation")
         scroll["retryable"] = JsonPrimitive(true)
         scroll["attempt"] = JsonPrimitive(2)
 
         val visibleIds = activeScrolls.keys.toList()
-        val phase = scroll["phase"]?.jsonPrimitive?.contentOrNull ?: "missing"
-        val removed = scroll.remove("retryable")?.jsonPrimitive?.contentOrNull ?: "null"
+        val phase = scroll["phase"]?.let { it.toString() } ?: "missing"
+        val removed = scroll.remove("retryable")?.let { it.toString() } ?: "null"
 
         appendTimeline(
             title = "Map read/remove",
@@ -140,13 +135,12 @@ class ShowcaseController {
             payload = "",
             success = true,
         )
-        sealScroll(scroll, scribe, success = true)
+        sealScroll(scroll, AppScribe, success = true)
         updateStatus("Ran custom-id scroll demo with map reads/removals and local active-scroll tracking.")
     }
 
     fun runMarginScenario() = launchScenario("Margin + seal(failure) demo") {
-        val scribe = activeMainScribe("margin_scroll") ?: return@launchScenario
-        val scroll = openScroll(scribe, id = "inventory-sync-1")
+        val scroll = openScroll(AppScribe, id = "inventory-sync-1")
         scroll["demo_name"] = JsonPrimitive("margin_scroll")
         scroll["flow"] = JsonPrimitive("inventory-sync")
         scroll["warehouse"] = JsonPrimitive("gru-1")
@@ -154,7 +148,7 @@ class ShowcaseController {
         scroll["failure_reason"] = JsonPrimitive("downstream retry scheduled")
         sealScroll(
             scroll,
-            scribe,
+            AppScribe,
             success = false,
         )
         delay(250)
@@ -162,8 +156,7 @@ class ShowcaseController {
     }
 
     fun runJsonSerializationScenario() = launchScenario("JSON serialization scroll demo") {
-        val scribe = activeMainScribe("json_serialization") ?: return@launchScenario
-        val scroll = openScroll(scribe, id = "json-serialization-1")
+        val scroll = openScroll(AppScribe, id = "json-serialization-1")
 
         val snapshot = SerializationOrderSnapshot(
             orderId = "order-555",
@@ -194,51 +187,49 @@ class ShowcaseController {
         scroll["buyer_tier"] = JsonPrimitive(snapshot.buyer.tier)
         scroll["primary_sku"] = JsonPrimitive(snapshot.lineItems.first().sku)
         scroll["channel"] = JsonPrimitive(snapshot.metadata["channel"] ?: "unknown")
-        scroll["order_item_count"] = JsonPrimitive(snapshot.lineItems.sumOf(SerializationLineItem::quantity))
+        scroll["order_item_count"] = JsonPrimitive(snapshot.lineItems.sumOf { it.quantity })
         scroll["order_tag_count"] = JsonPrimitive(snapshot.tags.size)
         scroll["expected_render_checks"] = JsonPrimitive(
             "order_snapshot.order_id,order_snapshot.buyer.tier,order_snapshot.line_items[0].sku,order_snapshot.metadata.channel,order_id,buyer_tier,primary_sku,channel,order_item_count,order_tag_count",
         )
 
-        sealScroll(scroll, scribe, success = true)
+        sealScroll(scroll, AppScribe, success = true)
         updateStatus("Ran JSON serialization demo with a nested object payload for console inspection.")
     }
 
     fun runEntrySaverScenario() = launchScenario("Unified EntrySaver demo") {
-        val scribe = activeMainScribe("entry_saver_demo") ?: return@launchScenario
-        scribe.note(
+        AppScribe.note(
             tag = "auth",
             message = "Session accepted for staff dashboard",
             level = Urgency.INFO,
         )
-        val scroll = openScroll(scribe, id = "session-audit")
+        val scroll = openScroll(AppScribe, id = "session-audit")
         scroll["demo_name"] = JsonPrimitive("entry_saver_demo")
         scroll["role"] = JsonPrimitive("support")
         scroll["elevated_access"] = JsonPrimitive(true)
-        sealScroll(scroll, scribe, success = true)
+        sealScroll(scroll, AppScribe, success = true)
         updateStatus("Ran a mixed note + scroll demo through one EntrySaver path.")
     }
 
     fun runOverflowScenario() = launchScenario("Overflow demo") {
-        val scribe = activeMainScribe("overflow_demo") ?: return@launchScenario
         val baseline = printedEvents
         val attempted = 12
 
-        overflowMode = true
+        AppScribe.overflowDelay = true
         repeat(attempted) { index ->
-            scribe.note(
+            AppScribe.note(
                 tag = "buffer",
                 message = "burst event #$index",
                 level = if (index % 3 == 0) Urgency.WARN else Urgency.INFO,
             )
         }
         delay(1800)
-        overflowMode = false
+        AppScribe.overflowDelay = false
 
         val delivered = printedEvents - baseline
         appendTimeline(
             title = "Overflow result",
-            detail = "Attempted $attempted notes with channel capacity $MAIN_CHANNEL_CAPACITY and DROP_OLDEST; delivered $delivered.",
+            detail = "Attempted $attempted notes with channel capacity 2 and DROP_OLDEST; delivered $delivered.",
             payload = "",
             success = delivered < attempted,
         )
@@ -246,8 +237,7 @@ class ShowcaseController {
     }
 
     fun runSaverFailureScenario() = launchScenario("Saver error demo") {
-        val scribe = activeMainScribe("saver_failure") ?: return@launchScenario
-        scribe.note(
+        AppScribe.note(
             tag = "saver_failure",
             message = "Intentional saver failure probe",
             level = Urgency.WARN,
@@ -256,10 +246,9 @@ class ShowcaseController {
     }
 
     fun runRetireScenario() = launchScenario("retire() demo") {
-        val scribe = activeMainScribe("retire_demo") ?: return@launchScenario
-        scribe.note("shutdown", "retire() with light queue", Urgency.INFO)
+        AppScribe.note("shutdown", "retire() with light queue", Urgency.INFO)
         val started = currentEpochMillis()
-        scribe.retire()
+        AppScribe.retire()
         val elapsed = currentEpochMillis() - started
 
         activeScrolls.clear()
@@ -275,12 +264,11 @@ class ShowcaseController {
     }
 
     fun runPlanRetireScenario() = launchScenario("retire() with backlog demo") {
-        val scribe = activeMainScribe("retire_backlog_demo") ?: return@launchScenario
         repeat(6) { index ->
-            scribe.note("shutdown", "drain probe #$index", Urgency.INFO)
+            AppScribe.note("shutdown", "drain probe #$index", Urgency.INFO)
         }
         val started = currentEpochMillis()
-        scribe.retire()
+        AppScribe.retire()
         val elapsed = currentEpochMillis() - started
 
         activeScrolls.clear()
@@ -296,8 +284,7 @@ class ShowcaseController {
     }
 
     fun wireIgnitionScenario() = launchScenario("onIgnition wiring") {
-        val scribe = activeMainScribe("ignition_hook") ?: return@launchScenario
-        scribe.note(
+        AppScribe.note(
             tag = "ignition",
             message = "onIgnition callback is configured; the demo avoids firing an uncaught exception.",
             level = Urgency.INFO,
@@ -322,7 +309,14 @@ class ShowcaseController {
             return@launchScenario
         }
 
-        hireMainScribe(mainScribe)
+        AppScribe.hireDefault(
+            scope = scope,
+            onSaver = { saver, entry, error ->
+                appendSaverError(
+                    "Saver failure in ${saver::class.simpleName ?: "Saver"} for ${entryKind(entry)}: ${error.message ?: error}",
+                )
+            },
+        )
         _state.update { it.copy(isRetired = false) }
         refreshActiveScrolls()
         updateStatus("The shared demo Scribe was re-hired and can send messages again.")
@@ -335,9 +329,7 @@ class ShowcaseController {
     }
 
     fun close() {
-        scope.launch {
-            runCatching { mainScribe.retire() }
-        }
+        AppScribe.close(scope)
     }
 
     private fun launchScenario(label: String, block: suspend () -> Unit) {
@@ -361,79 +353,12 @@ class ShowcaseController {
         }
     }
 
-    private fun activeMainScribe(demoName: String): Scribe? {
-        if (_state.value.isRetired) {
-            val message = "The shared demo Scribe is retired. Press Re-hire Scribe before running $demoName."
-            updateStatus(message)
-            appendTimeline(
-                title = "Scribe retired",
-                detail = message,
-                payload = "",
-                success = false,
-            )
-            return null
-        }
-        return mainScribe
-    }
-
-    private fun createMainScribe(): Scribe =
-        object : Scribe() {
-            override val shelves = listOf(
-                failingEntrySaver(),
-                consoleEntrySaver("shared_session", "EntrySaver"),
-            )
-            override val imprint = sampleImprint(platform) + mapOf(
-                "output" to JsonPrimitive("console"),
-                "session_kind" to JsonPrimitive("persistent-demo"),
-            )
-            override val margins = defaultMargin
-            override val onIgnition: (Throwable) -> Unit = { throwable ->
-                println("Scribe onIgnition: ${throwable.message ?: throwable}")
-                _state.update {
-                    it.copy(ignitionMessage = "onIgnition captured ${throwable.message}")
-                }
-            }
-        }
-
-    private fun hireMainScribe(scribe: Scribe) {
-        scribe.hire(
-            scope = scope,
-            channel = Channel(capacity = MAIN_CHANNEL_CAPACITY, onBufferOverflow = BufferOverflow.DROP_OLDEST),
-            onSaver = { saver, entry, error ->
-                appendSaverError(
-                    "Saver failure in ${saver::class.simpleName ?: "Saver"} for ${entryKind(entry)}: ${error.message ?: error}",
-                )
-            },
-        )
-    }
-
-    private fun failingEntrySaver(): EntrySaver = EntrySaver { entry ->
-        if (entry is Note && entry.tag == "saver_failure") {
-            error("Intentional saver failure from showcase demo")
-        }
-    }
-
-    private fun consoleEntrySaver(
-        demoName: String,
-        saverType: String,
-    ): EntrySaver = EntrySaver { entry ->
-        printRecord(entry, demoName, saverType)
-    }
-
-    private suspend fun printRecord(
-        entry: Entry,
-        demoName: String,
-        saverType: String,
-    ) {
-        if (overflowMode) {
-            delay(220)
-        }
-
+    private fun handleRecord(entry: Entry) {
         val record = consoleRecordFromEntry(
             entry = entry,
-            demoName = demoName,
+            demoName = "shared_session",
             platform = platform,
-            saverType = saverType,
+            saverType = "EntrySaver",
             appVersion = appVersion,
             recordedAt = currentEpochMillis(),
         )
@@ -448,7 +373,7 @@ class ShowcaseController {
             )
         }
         appendTimeline(
-            title = "${payloadEventKind(record)} via $saverType",
+            title = "${payloadEventKind(record)} via EntrySaver",
             detail = "${recordSummary(record)}. Printed to console.",
             payload = payload,
             success = true,
@@ -501,7 +426,7 @@ class ShowcaseController {
         return scroll
     }
 
-    private suspend fun sealScroll(scroll: Scroll, scribe: Scribe, success: Boolean) {
+    private fun sealScroll(scroll: Scroll, scribe: Scribe, success: Boolean) {
         scroll.seal(scribe, success = success)
         activeScrolls.remove(scroll.id)
         refreshActiveScrolls()
@@ -512,8 +437,4 @@ class ShowcaseController {
             is Note -> "note"
             else -> "scroll"
         }
-
-    private companion object {
-        const val MAIN_CHANNEL_CAPACITY = 2
-    }
 }

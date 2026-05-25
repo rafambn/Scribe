@@ -84,7 +84,10 @@ mavenPublishing {
 
     publishToMavenCentral(automaticRelease = false)
 
-    signAllPublications()
+    val signingKey = providers.gradleProperty("signing.keyId")
+    if (signingKey.isPresent) {
+        signAllPublications()
+    }
 
     configure(
         KotlinMultiplatform(

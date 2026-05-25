@@ -89,7 +89,7 @@ val scroll = BillingScribe.newScroll(id = "checkout-42")
 scroll["gateway"] = JsonPrimitive("stripe")
 scroll["attempt"] = JsonPrimitive(1)
 scroll["retry"] = JsonPrimitive(false)
-scroll.seal(success = true)
+scroll.seal(BillingScribe, success = true)
 ```
 
 Each `Scribe` object has independent configuration and delivery lifecycle. A `Scroll` is bound to the object that created it, so `scroll.seal()` always delivers through that runtime. Each `seal(...)` call emits a separate `SealedScroll` snapshot.

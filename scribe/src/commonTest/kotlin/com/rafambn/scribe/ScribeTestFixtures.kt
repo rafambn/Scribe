@@ -51,14 +51,14 @@ internal fun scribeWithSavers(
 
 internal fun <T> runSuspend(block: suspend () -> T): T = runBlocking { block() }
 
-internal suspend fun createScribeInHelperAndEmit(shelf: ScrollSaver): Scribe {
+internal fun createScribeInHelperAndEmit(shelf: ScrollSaver): Scribe {
     val scribe = scribeWithScrollShelves(shelf)
     scribe.newScroll(id = "scoped").seal(scribe)
     return scribe
 }
 
 internal class PaymentService {
-    suspend fun pay(orderId: String, scroll: Scroll, scribe: Scribe) {
+    fun pay(orderId: String, scroll: Scroll, scribe: Scribe) {
         try {
             scroll["scrollId"] = JsonPrimitive(scroll.id)
             if (orderId == "order2") {

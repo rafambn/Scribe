@@ -51,7 +51,7 @@ sharing queues, savers, or lifecycle.
 ```kotlin
 val scroll: Scroll = CheckoutScribe.newScroll(id = "checkout-42")
 scroll["gateway"] = JsonPrimitive("stripe")
-scroll.seal() // delivers only through CheckoutScribe
+scroll.seal(CheckoutScribe) // delivers only through CheckoutScribe
 ```
 
 It delegates normal mutable map operations, so you write JSON-safe values
