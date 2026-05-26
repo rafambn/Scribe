@@ -8,9 +8,6 @@ import com.rafambn.scribe.Scribe
 import com.rafambn.scribe.Scroll
 import com.rafambn.scribe.Urgency
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.channels.BufferOverflow
-import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.JsonPrimitive
@@ -20,7 +17,7 @@ import scribe.demo.currentEpochMillis
 import scribe.demo.data.sampleImprint
 import scribe.demo.platformName
 
-object AppScribe : Scribe() {
+class AppScribe(onRecord: (Entry) -> Unit) : Scribe() {
 
     var overflowDelay: Boolean = false
 
@@ -32,7 +29,7 @@ object AppScribe : Scribe() {
         },
         EntrySaver { entry ->
             if (overflowDelay) delay(220)
-            onRecord?.invoke(entry)
+            onRecord(entry)
         },
     )
 
@@ -57,16 +54,6 @@ object AppScribe : Scribe() {
 
     override val onIgnition: (Throwable) -> Unit = { throwable ->
         println("Scribe onIgnition: ${throwable.message ?: throwable}")
-    }
-
-    var onRecord: ((Entry) -> Unit)? = null
-
-    fun hireDefault(scope: CoroutineScope, onSaver: ((com.rafambn.scribe.Saver<*>, Entry, Throwable) -> Unit)? = null) {
-        hire(
-            scope = scope,
-            channel = Channel(capacity = 2, onBufferOverflow = BufferOverflow.DROP_OLDEST),
-            onSaver = onSaver,
-        )
     }
 
     fun close(scope: CoroutineScope) {
