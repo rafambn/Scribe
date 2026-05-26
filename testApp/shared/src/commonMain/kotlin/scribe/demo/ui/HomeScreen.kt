@@ -32,17 +32,15 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import scribe.demo.viewmodel.ShowcaseViewModel
-import scribe.demo.data.ShowcaseUiState
 import scribe.demo.platformName
 
 @Composable
-fun Screen() {
-    val controller = remember { ShowcaseViewModel() }
-    val state by controller.state.collectAsState()
+fun HomeScreen() {
+    val viewModel = remember { HomeViewModel() }
+    val state by viewModel.state.collectAsState()
 
-    DisposableEffect(controller) {
-        onDispose { controller.close() }
+    DisposableEffect(viewModel) {
+        onDispose { viewModel.close() }
     }
 
     MaterialTheme {
@@ -72,8 +70,8 @@ fun Screen() {
                     title = "Notes",
                     description = "Standalone events through the suspending note(...) API.",
                     buttons = listOf(
-                        "Run note(...)" to controller::runNoteScenario,
-                        "Run second note(...)" to controller::runFlingNoteScenario,
+                        "Run note(...)" to viewModel::runNoteScenario,
+                        "Run second note(...)" to viewModel::runFlingNoteScenario,
                     ),
                     enabled = !state.isBusy,
                 )
@@ -81,9 +79,9 @@ fun Screen() {
                     title = "Scrolls",
                     description = "Wide-event flows with generated/custom IDs, direct map writes, and margins.",
                     buttons = listOf(
-                        "Checkout flow" to controller::runCheckoutScenario,
-                        "Map read/remove" to controller::runInspectionScenario,
-                        "Margins + seal(failure)" to controller::runMarginScenario,
+                        "Checkout flow" to viewModel::runCheckoutScenario,
+                        "Map read/remove" to viewModel::runInspectionScenario,
+                        "Margins + seal(failure)" to viewModel::runMarginScenario,
                     ),
                     enabled = !state.isBusy,
                 )
@@ -91,8 +89,8 @@ fun Screen() {
                     title = "Console Rendering Checks",
                     description = "Validate nested JSON object serialization and string-template rendering in console records.",
                     buttons = listOf(
-                        "JSON object serialization" to controller::runJsonSerializationScenario,
-                        "String template message" to controller::runStringTemplateScenario,
+                        "JSON object serialization" to viewModel::runJsonSerializationScenario,
+                        "String template message" to viewModel::runStringTemplateScenario,
                     ),
                     enabled = !state.isBusy,
                 )
@@ -100,9 +98,9 @@ fun Screen() {
                     title = "Savers And Delivery",
                     description = "Use the three saver types, queue overflow behavior, and saver error handling.",
                     buttons = listOf(
-                        "EntrySaver mixed flow" to controller::runEntrySaverScenario,
-                        "Overflow demo" to controller::runOverflowScenario,
-                        "Saver failure demo" to controller::runSaverFailureScenario,
+                        "EntrySaver mixed flow" to viewModel::runEntrySaverScenario,
+                        "Overflow demo" to viewModel::runOverflowScenario,
+                        "Saver failure demo" to viewModel::runSaverFailureScenario,
                     ),
                     enabled = !state.isBusy,
                 )
@@ -110,10 +108,10 @@ fun Screen() {
                     title = "Shutdown And Safety",
                     description = "Use retire() shutdown flows and wire the onIgnition callback safely.",
                     buttons = listOf(
-                        "Re-hire Scribe" to controller::rehireMainScribe,
-                        "retire() (light queue)" to controller::runRetireScenario,
-                        "retire() with backlog" to controller::runPlanRetireScenario,
-                        "Wire onIgnition" to controller::wireIgnitionScenario,
+                        "Re-hire Scribe" to viewModel::rehireMainScribe,
+                        "retire() (light queue)" to viewModel::runRetireScenario,
+                        "retire() with backlog" to viewModel::runPlanRetireScenario,
+                        "Wire onIgnition" to viewModel::wireIgnitionScenario,
                     ),
                     enabled = !state.isBusy,
                 )
@@ -154,7 +152,7 @@ private fun HeroCard() {
 }
 
 @Composable
-private fun StatusCard(state: ShowcaseUiState) {
+private fun StatusCard(state: HomeState) {
     Card(shape = RoundedCornerShape(24.dp)) {
         Column(
             modifier = Modifier.padding(18.dp),
@@ -220,7 +218,7 @@ private fun ActionGroup(
 }
 
 @Composable
-private fun TimelineCard(state: ShowcaseUiState) {
+private fun TimelineCard(state: HomeState) {
     Card(shape = RoundedCornerShape(24.dp)) {
         Column(
             modifier = Modifier.padding(18.dp),

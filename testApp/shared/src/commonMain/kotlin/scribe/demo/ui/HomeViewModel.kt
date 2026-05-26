@@ -1,9 +1,9 @@
-package scribe.demo.viewmodel
+package scribe.demo.ui
 
 import com.rafambn.scribe.Entry
 import com.rafambn.scribe.Note
-import com.rafambn.scribe.Scroll
 import com.rafambn.scribe.Scribe
+import com.rafambn.scribe.Scroll
 import com.rafambn.scribe.Urgency
 import com.rafambn.scribe.id
 import com.rafambn.scribe.seal
@@ -21,22 +21,21 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
-import kotlinx.serialization.json.encodeToJsonElement
 import scribe.demo.currentEpochMillis
 import scribe.demo.data.CheckoutMeta
 import scribe.demo.data.SerializationBuyer
 import scribe.demo.data.SerializationLineItem
 import scribe.demo.data.SerializationOrderSnapshot
 import scribe.demo.data.SerializationPayment
-import scribe.demo.data.ShowcaseUiState
 import scribe.demo.data.TimelineItem
 import scribe.demo.data.consoleRecordFromEntry
 import scribe.demo.data.payloadEventKind
 import scribe.demo.data.recordSummary
 import scribe.demo.platformName
 import scribe.demo.scribe.AppScribe
+import kotlin.collections.set
 
-class ShowcaseViewModel {
+class HomeViewModel {
     private val json = Json {
         prettyPrint = true
         prettyPrintIndent = "  "
@@ -49,8 +48,8 @@ class ShowcaseViewModel {
     private val activeScrolls = linkedMapOf<String, Scroll>()
     private var printedEvents = 0
 
-    private val _state = MutableStateFlow(ShowcaseUiState())
-    val state: StateFlow<ShowcaseUiState> = _state.asStateFlow()
+    private val _state = MutableStateFlow(HomeState())
+    val state: StateFlow<HomeState> = _state.asStateFlow()
 
     init {
         AppScribe.onRecord = { entry ->
@@ -360,7 +359,7 @@ class ShowcaseViewModel {
         )
 
         printedEvents += 1
-        val payload = json.encodeToString(JsonObject.serializer(), JsonObject(record))
+        val payload = json.encodeToString(JsonObject.Companion.serializer(), JsonObject(record))
         println(payload)
         _state.update {
             it.copy(

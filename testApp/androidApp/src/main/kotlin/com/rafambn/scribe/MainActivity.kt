@@ -1,15 +1,15 @@
-package hello.world
+package com.rafambn.scribe
 
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
-import scribe.demo.ui.Screen
+import scribe.demo.ui.HomeScreen
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent {
-            Screen()
+            HomeScreen()
         }
     }
 }

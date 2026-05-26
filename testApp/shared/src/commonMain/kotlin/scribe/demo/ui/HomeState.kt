@@ -1,6 +1,8 @@
-package scribe.demo.data
+package scribe.demo.ui
 
-data class ShowcaseUiState(
+import scribe.demo.data.TimelineItem
+
+data class HomeState(
     val isBusy: Boolean = false,
     val busyLabel: String = "",
     val statusMessage: String = "Ready to run demo scenarios.",
