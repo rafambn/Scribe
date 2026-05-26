@@ -16,7 +16,16 @@ fun HomeScreen() {
     }
 
     HomeContent(
-        state = state,
+        isBusy = state.isBusy,
+        busyLabel = state.busyLabel,
+        outputMessage = state.outputMessage,
+        statusMessage = state.statusMessage,
+        isRetired = state.isRetired,
+        ignitionMessage = state.ignitionMessage,
+        activeScrollIds = state.activeScrollIds,
+        saverErrors = state.saverErrors,
+        lastRecord = state.lastRecord,
+        timeline = state.timeline,
         onRunNoteScenario = viewModel::runNoteScenario,
         onRunFlingNoteScenario = viewModel::runFlingNoteScenario,
         onRunCheckoutScenario = viewModel::runCheckoutScenario,

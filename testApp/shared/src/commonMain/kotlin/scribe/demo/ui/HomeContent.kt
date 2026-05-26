@@ -28,11 +28,21 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import scribe.demo.data.TimelineItem
 import scribe.demo.platformName
 
 @Composable
 fun HomeContent(
-    state: HomeState,
+    isBusy: Boolean,
+    busyLabel: String,
+    outputMessage: String,
+    statusMessage: String,
+    isRetired: Boolean,
+    ignitionMessage: String,
+    activeScrollIds: List<String>,
+    saverErrors: List<String>,
+    lastRecord: String,
+    timeline: List<TimelineItem>,
     onRunNoteScenario: () -> Unit,
     onRunFlingNoteScenario: () -> Unit,
     onRunCheckoutScenario: () -> Unit,
@@ -70,7 +80,16 @@ fun HomeContent(
                 verticalArrangement = Arrangement.spacedBy(16.dp),
             ) {
                 HeroCard()
-                StatusCard(state)
+                StatusCard(
+                    outputMessage = outputMessage,
+                    statusMessage = statusMessage,
+                    isRetired = isRetired,
+                    ignitionMessage = ignitionMessage,
+                    activeScrollIds = activeScrollIds,
+                    saverErrors = saverErrors,
+                    isBusy = isBusy,
+                    busyLabel = busyLabel,
+                )
                 ActionGroup(
                     title = "Notes",
                     description = "Standalone events through the suspending note(...) API.",
@@ -78,7 +97,7 @@ fun HomeContent(
                         "Run note(...)" to onRunNoteScenario,
                         "Run second note(...)" to onRunFlingNoteScenario,
                     ),
-                    enabled = !state.isBusy,
+                    enabled = !isBusy,
                 )
                 ActionGroup(
                     title = "Scrolls",
@@ -88,7 +107,7 @@ fun HomeContent(
                         "Map read/remove" to onRunInspectionScenario,
                         "Margins + seal(failure)" to onRunMarginScenario,
                     ),
-                    enabled = !state.isBusy,
+                    enabled = !isBusy,
                 )
                 ActionGroup(
                     title = "Console Rendering Checks",
@@ -97,7 +116,7 @@ fun HomeContent(
                         "JSON object serialization" to onRunJsonSerializationScenario,
                         "String template message" to onRunStringTemplateScenario,
                     ),
-                    enabled = !state.isBusy,
+                    enabled = !isBusy,
                 )
                 ActionGroup(
                     title = "Savers And Delivery",
@@ -107,7 +126,7 @@ fun HomeContent(
                         "Overflow demo" to onRunOverflowScenario,
                         "Saver failure demo" to onRunSaverFailureScenario,
                     ),
-                    enabled = !state.isBusy,
+                    enabled = !isBusy,
                 )
                 ActionGroup(
                     title = "Shutdown And Safety",
@@ -118,9 +137,9 @@ fun HomeContent(
                         "retire() with backlog" to onRunPlanRetireScenario,
                         "Wire onIgnition" to onWireIgnitionScenario,
                     ),
-                    enabled = !state.isBusy,
+                    enabled = !isBusy,
                 )
-                TimelineCard(state)
+                TimelineCard(lastRecord, timeline)
             }
         }
     }
@@ -157,38 +176,47 @@ private fun HeroCard() {
 }
 
 @Composable
-private fun StatusCard(state: HomeState) {
+private fun StatusCard(
+    outputMessage: String,
+    statusMessage: String,
+    isRetired: Boolean,
+    ignitionMessage: String,
+    activeScrollIds: List<String>,
+    saverErrors: List<String>,
+    isBusy: Boolean,
+    busyLabel: String,
+) {
     Card(shape = RoundedCornerShape(24.dp)) {
         Column(
             modifier = Modifier.padding(18.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             Text("Console Output", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
-            Text(state.outputMessage, style = MaterialTheme.typography.bodyMedium)
-            Text("Status: ${state.statusMessage}", style = MaterialTheme.typography.bodyMedium)
+            Text(outputMessage, style = MaterialTheme.typography.bodyMedium)
+            Text("Status: $statusMessage", style = MaterialTheme.typography.bodyMedium)
             Text(
-                "Scribe instance: ${if (state.isRetired) "retired" else "active"}",
+                "Scribe instance: ${if (isRetired) "retired" else "active"}",
                 style = MaterialTheme.typography.bodyMedium,
-                color = if (state.isRetired) Color(0xFF9C2F2F) else Color(0xFF1D5C63),
+                color = if (isRetired) Color(0xFF9C2F2F) else Color(0xFF1D5C63),
             )
-            Text("Ignition: ${state.ignitionMessage}", style = MaterialTheme.typography.bodyMedium)
-            if (state.activeScrollIds.isNotEmpty()) {
+            Text("Ignition: $ignitionMessage", style = MaterialTheme.typography.bodyMedium)
+            if (activeScrollIds.isNotEmpty()) {
                 Text(
-                    "Active scrolls: ${state.activeScrollIds.joinToString()}",
+                    "Active scrolls: ${activeScrollIds.joinToString()}",
                     style = MaterialTheme.typography.bodyMedium,
                 )
             }
-            if (state.saverErrors.isNotEmpty()) {
+            if (saverErrors.isNotEmpty()) {
                 Text(
-                    "Saver errors: ${state.saverErrors.joinToString()}",
+                    "Saver errors: ${saverErrors.joinToString()}",
                     style = MaterialTheme.typography.bodyMedium,
                     color = Color(0xFF9C2F2F),
                 )
             }
-            if (state.isBusy) {
+            if (isBusy) {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
-                    Text(state.busyLabel, style = MaterialTheme.typography.bodyMedium)
+                    Text(busyLabel, style = MaterialTheme.typography.bodyMedium)
                 }
             }
         }
@@ -223,7 +251,7 @@ private fun ActionGroup(
 }
 
 @Composable
-private fun TimelineCard(state: HomeState) {
+private fun TimelineCard(lastRecord: String, timeline: List<TimelineItem>) {
     Card(shape = RoundedCornerShape(24.dp)) {
         Column(
             modifier = Modifier.padding(18.dp),
@@ -231,14 +259,14 @@ private fun TimelineCard(state: HomeState) {
         ) {
             Text("Timeline", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
             Text("Last console record", style = MaterialTheme.typography.bodyMedium)
-            if (state.lastRecord.isNotBlank()) {
+            if (lastRecord.isNotBlank()) {
                 Surface(
                     color = Color(0xFF101820),
                     shape = RoundedCornerShape(18.dp),
                 ) {
                     SelectionContainer {
                         Text(
-                            text = state.lastRecord,
+                            text = lastRecord,
                             modifier = Modifier.padding(14.dp),
                             color = Color(0xFFE9F1F7),
                             fontFamily = FontFamily.Monospace,
@@ -247,7 +275,7 @@ private fun TimelineCard(state: HomeState) {
                     }
                 }
             }
-            state.timeline.forEachIndexed { index, item ->
+            timeline.forEachIndexed { index, item ->
                 if (index > 0) {
                     HorizontalDivider()
                 }
