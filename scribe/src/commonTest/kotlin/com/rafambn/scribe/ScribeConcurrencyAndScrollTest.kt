@@ -1,6 +1,7 @@
 package com.rafambn.scribe
 
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.JsonPrimitive
@@ -12,7 +13,10 @@ class ScribeConcurrencyAndScrollTest {
     fun note_supports_high_throughput_concurrent_writes() {
         runSuspend {
             val saver = RecordingNoteSaver()
-            val scribe = scribeWithSavers(shelves = listOf(saver))
+            val scribe = scribeWithSavers(
+                shelves = listOf(saver),
+                channel = Channel(Channel.UNLIMITED),
+            )
 
             coroutineScope {
                 repeat(1_000) { index ->
@@ -43,8 +47,8 @@ class ScribeConcurrencyAndScrollTest {
             val scroll = scribe.newScroll(id = "scroll-id")
 
             scroll["state"] = JsonPrimitive("initial")
-            val first = scroll.seal(success = false)
-            val second = scroll.seal(success = true)
+            val first = scroll.seal(scribe, success = false)
+            val second = scroll.seal(scribe, success = true)
             shelf.awaitEvents(2)
             scribe.retire()
 

@@ -2,27 +2,30 @@
 
 ## Delivery Pipeline
 
-`Scribe` delivers entries through the `Channel<Entry>` you provide to `hire(...)`. The channel is disposable and transfers ownership to Scribe, which closes it on processor completion or `retire()`. Create a fresh channel for each `hire(...)` call.
+A `Scribe` object delivers entries through the `Channel<Entry>` provided to
+`hire(...)`. The channel is disposable and transfers ownership to that object,
+which closes it on processor completion or `retire()`. Different `Scribe`
+objects may be hired concurrently with independent channels.
 
 You can optionally provide a custom `CoroutineScope` to control the delivery coroutine lifecycle:
 
 ```kotlin
 val customScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
-Scribe.hire(
+CheckoutScribe.hire(
     scope = customScope,
     channel = Channel(capacity = 256),
 )
 ```
 
 ```kotlin
-Scribe.inscribe {
-    shelves = listOf(EntrySaver { entry ->
+object CheckoutScribe : Scribe() {
+    override val shelves: List<Saver<*>> = listOf(EntrySaver { entry ->
         println(entry)
     })
 }
 
-Scribe.hire(
+CheckoutScribe.hire(
     channel = Channel(
         capacity = 256,
         onBufferOverflow = BufferOverflow.DROP_OLDEST,
@@ -35,29 +38,34 @@ Scribe.hire(
 
 ## Emission APIs
 
-Current emission calls are suspending:
+Current emission calls are non-suspending:
 
 - `note(...)` sends a `Note`
-- `seal(...)` snapshots the current `Scroll` data and sends a `SealedScroll`
+- `seal(scribe, ...)` applies that runtime's footer margin, snapshots the
+  current `Scroll` data, and sends a `SealedScroll`
 
-There are no separate best-effort APIs in this runtime shape.
+Both calls attempt an immediate channel send and block the calling thread if a
+channel configured with `BufferOverflow.SUSPEND` is full. `Saver.write(...)`
+and `retire()` are the suspending parts of the API. There are no separate
+best-effort emission APIs in this runtime shape.
 
-Multiple calls to `seal(...)` on the same `Scroll` are intentional. Each call emits a separate `SealedScroll`, so a flow can record more than one terminal snapshot when that is useful.
+Multiple calls to `seal(...)` on the same `Scroll` are intentional. Each call
+emits a separate `SealedScroll` through the `Scribe` passed to that call.
 
 ## Shared Context with `imprint`
 
-`imprint` adds fields to every new `Scroll` created by the same `Scribe`.
+`imprint` adds fields to every new `Scroll` created by the same `Scribe` object.
 
 ```kotlin
-Scribe.inscribe {
-    shelves = listOf(ScrollSaver { println(it) })
-    imprint = mapOf(
+object CheckoutScribe : Scribe() {
+    override val shelves: List<Saver<*>> = listOf(ScrollSaver { println(it) })
+    override val imprint = mapOf(
         "app" to JsonPrimitive("checkout"),
         "region" to JsonPrimitive("us-east-1"),
     )
 }
 
-Scribe.hire(channel = Channel(capacity = 256))
+CheckoutScribe.hire(channel = Channel(capacity = 256))
 ```
 
 These values are inserted into the scroll map and then appear in `SealedScroll.data`.
@@ -77,12 +85,12 @@ val timingMargin = object : Margin {
     }
 }
 
-Scribe.inscribe {
-    shelves = listOf(ScrollSaver { println(it) })
-    margins = timingMargin
+object CheckoutScribe : Scribe() {
+    override val shelves: List<Saver<*>> = listOf(ScrollSaver { println(it) })
+    override val margins = timingMargin
 }
 
-Scribe.hire(channel = Channel(capacity = 256))
+CheckoutScribe.hire(channel = Channel(capacity = 256))
 ```
 
 ## Graceful Shutdown
@@ -90,22 +98,27 @@ Scribe.hire(channel = Channel(capacity = 256))
 Use `retire()` to stop intake and wait until queued delivery work is finished.
 
 ```kotlin
-Scribe.retire()
+CheckoutScribe.retire()
 ```
 
-After `retire()`, the previous channel is closed and cannot be reused. Call `hire(...)` with a new channel to restart runtime delivery.
+After `retire()`, that object's previous channel is closed and cannot be
+reused. Call `hire(...)` with a new channel to restart its delivery. Other
+active `Scribe` objects are unaffected.
 
 ## Uncaught Exceptions
 
-Set `onIgnition` in `Scribe.inscribe { ... }` to install the platform uncaught exception hook:
+Override `onIgnition` on an application-owned `Scribe` object to install the
+platform uncaught exception hook when that object is first hired:
 
 ```kotlin
-Scribe.inscribe {
-    shelves = listOf(EntrySaver { println(it) })
-    onIgnition = { throwable ->
+object ApplicationScribe : Scribe() {
+    override val shelves: List<Saver<*>> = listOf(EntrySaver { println(it) })
+    override val onIgnition: ((Throwable) -> Unit)? = { throwable ->
         println("Uncaught exception: ${throwable.message}")
     }
 }
 ```
 
-Saver-level failures are handled separately by `onSaver` passed to `hire(...)`.
+This hook is platform-global even though the property is declared by one
+runtime object. Saver-level failures are handled separately by `onSaver` passed
+to `hire(...)`.

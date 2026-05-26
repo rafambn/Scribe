@@ -18,7 +18,7 @@ class ScribeContextMarginTest {
             )
             val scribe = scribeWithScrollShelves(shelf, imprint = imprint)
 
-            scribe.newScroll().seal()
+            scribe.newScroll().seal(scribe)
             shelf.awaitEvents(1)
             scribe.retire()
 
@@ -35,8 +35,8 @@ class ScribeContextMarginTest {
             val imprint = mapOf("region" to JsonPrimitive("us-east"))
             val scribe = scribeWithScrollShelves(shelf, imprint = imprint)
 
-            scribe.newScroll(id = "first").seal()
-            scribe.newScroll(id = "second").seal()
+            scribe.newScroll(id = "first").seal(scribe)
+            scribe.newScroll(id = "second").seal(scribe)
             shelf.awaitEvents(2)
             scribe.retire()
 
@@ -59,7 +59,7 @@ class ScribeContextMarginTest {
             val scroll = scribe.newScroll()
 
             scroll["region"] = JsonPrimitive("ap-south")
-            scroll.seal()
+            scroll.seal(scribe)
             shelf.awaitEvents(1)
             scribe.retire()
 
@@ -84,7 +84,7 @@ class ScribeContextMarginTest {
             }
             val scribe = scribeWithScrollShelves(shelf, margins = timestampMargin)
 
-            scribe.newScroll().seal()
+            scribe.newScroll().seal(scribe)
             shelf.awaitEvents(1)
             scribe.retire()
 
@@ -100,7 +100,7 @@ class ScribeContextMarginTest {
             val shelf = RecordingShelf()
             val scribe = scribeWithScrollShelves(shelf, margins = null)
 
-            scribe.newScroll().seal()
+            scribe.newScroll().seal(scribe)
             shelf.awaitEvents(1)
             scribe.retire()
 
@@ -128,7 +128,7 @@ class ScribeContextMarginTest {
             }
             val scribe = scribeWithScrollShelves(shelf, margins = elapsedMargin)
 
-            scribe.newScroll().seal()
+            scribe.newScroll().seal(scribe)
             shelf.awaitEvents(1)
             scribe.retire()
 
@@ -154,7 +154,7 @@ class ScribeContextMarginTest {
             }
             val scribe = scribeWithScrollShelves(shelf, margins = margin)
 
-            scribe.newScroll().seal()
+            scribe.newScroll().seal(scribe)
             scribe.retire()
 
             assertEquals(listOf("header", "footer"), calls)

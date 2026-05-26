@@ -1,7 +1,6 @@
 package com.rafambn.scribe
 
 import kotlinx.coroutines.CompletableDeferred
-import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.runBlocking
@@ -12,54 +11,6 @@ import kotlinx.serialization.json.JsonPrimitive
 internal val UUID_REGEX =
     Regex("^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$")
 
-private var activeDelegatedSavers: List<Saver<*>> = emptyList()
-private var activeMargin: Margin? = null
-private var onSaverErrorCallback: (saver: Saver<*>, entry: Entry, error: Throwable) -> Unit = { _, _, _ -> }
-
-private val delegatingMargin = object : Margin {
-    override fun header(scroll: Scroll) {
-        activeMargin?.header(scroll)
-    }
-
-    override fun footer(scroll: Scroll) {
-        activeMargin?.footer(scroll)
-    }
-}
-
-private val delegatingEntrySaver = EntrySaver { entry ->
-    activeDelegatedSavers.forEach { saver ->
-        try {
-            when (saver) {
-                is EntrySaver -> saver.write(entry)
-                is ScrollSaver if entry is SealedScroll -> saver.write(entry)
-                is NoteSaver if entry is Note -> saver.write(entry)
-            }
-        } catch (error: CancellationException) {
-            throw error
-        } catch (error: Throwable) {
-            try {
-                onSaverErrorCallback(saver, entry, error)
-            } catch (_: Throwable) {
-                // Keep test delivery path alive when callback fails.
-            }
-        }
-    }
-}
-
-private var isInitialized = false
-
-private fun ensureScribeInitialized() {
-    if (isInitialized) {
-        runBlocking { Scribe.retire() }
-    }
-    Scribe.inscribe {
-        shelves = listOf(delegatingEntrySaver)
-        imprint = emptyMap()
-        margins = delegatingMargin
-    }
-    isInitialized = true
-}
-
 internal fun scribeWithScrollShelves(
     vararg shelves: ScrollSaver,
     imprint: Map<String, JsonElement> = emptyMap(),
@@ -67,13 +18,16 @@ internal fun scribeWithScrollShelves(
     onSaver: (saver: Saver<*>, entry: Entry, error: Throwable) -> Unit = { _, _, _ -> },
     margins: Margin? = null,
 ): Scribe {
-    ensureScribeInitialized()
-    Scribe.config!!.imprint = imprint
-    activeDelegatedSavers = shelves.toList()
-    activeMargin = margins
-    onSaverErrorCallback = onSaver
-    Scribe.hire(channel = channel, onSaver = onSaver)
-    return Scribe
+    val configuredShelves = shelves.toList()
+    val configuredImprint = imprint
+    val configuredMargins = margins
+    return object : Scribe() {
+        override val shelves: List<Saver<*>> = configuredShelves
+        override val imprint: Map<String, JsonElement> = configuredImprint
+        override val margins: Margin? = configuredMargins
+    }.also {
+        it.hire(channel = channel, onSaver = onSaver)
+    }
 }
 
 internal fun scribeWithSavers(
@@ -83,25 +37,28 @@ internal fun scribeWithSavers(
     channel: Channel<Entry> = Channel(capacity = 256, onBufferOverflow = BufferOverflow.DROP_OLDEST),
     onSaver: (saver: Saver<*>, entry: Entry, error: Throwable) -> Unit = { _, _, _ -> },
 ): Scribe {
-    ensureScribeInitialized()
-    Scribe.config!!.imprint = imprint
-    activeDelegatedSavers = shelves
-    activeMargin = margins
-    onSaverErrorCallback = onSaver
-    Scribe.hire(channel = channel, onSaver = onSaver)
-    return Scribe
+    val configuredShelves = shelves
+    val configuredImprint = imprint
+    val configuredMargins = margins
+    return object : Scribe() {
+        override val shelves: List<Saver<*>> = configuredShelves
+        override val imprint: Map<String, JsonElement> = configuredImprint
+        override val margins: Margin? = configuredMargins
+    }.also {
+        it.hire(channel = channel, onSaver = onSaver)
+    }
 }
 
 internal fun <T> runSuspend(block: suspend () -> T): T = runBlocking { block() }
 
-internal suspend fun createScribeInHelperAndEmit(shelf: ScrollSaver): Scribe {
+internal fun createScribeInHelperAndEmit(shelf: ScrollSaver): Scribe {
     val scribe = scribeWithScrollShelves(shelf)
-    scribe.newScroll(id = "scoped").seal()
+    scribe.newScroll(id = "scoped").seal(scribe)
     return scribe
 }
 
 internal class PaymentService {
-    suspend fun pay(orderId: String, scroll: Scroll) {
+    fun pay(orderId: String, scroll: Scroll, scribe: Scribe) {
         try {
             scroll["scrollId"] = JsonPrimitive(scroll.id)
             if (orderId == "order2") {
@@ -110,7 +67,7 @@ internal class PaymentService {
             scroll["gateway"] = JsonPrimitive("stripe")
         } catch (t: Throwable) {
             scroll["error_stage"] = JsonPrimitive("gateway_call")
-            scroll.seal(success = false)
+            scroll.seal(scribe, success = false)
             throw t
         }
     }

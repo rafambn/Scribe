@@ -11,7 +11,7 @@ plugins {
 }
 
 group = "com.rafambn"
-version = "0.3.2"
+version = "0.4.0"
 
 kotlin {
     jvm {
@@ -84,7 +84,10 @@ mavenPublishing {
 
     publishToMavenCentral(automaticRelease = false)
 
-    signAllPublications()
+    val signingKey = providers.gradleProperty("signing.keyId")
+    if (signingKey.isPresent) {
+        signAllPublications()
+    }
 
     configure(
         KotlinMultiplatform(

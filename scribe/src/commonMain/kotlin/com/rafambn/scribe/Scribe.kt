@@ -1,53 +1,62 @@
 package com.rafambn.scribe
 
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonPrimitive
 
 /**
- * Process-wide event writer that creates [Scroll]s and dispatches [Entry] objects to configured savers.
+ * Independent event writer that creates [Scroll]s and dispatches [Entry] objects to configured savers.
+ *
+ * Create an object that extends this type and override its configuration:
+ *
+ * ```
+ * object AppScribe : Scribe() {
+ *     override val shelves = listOf<EntrySaver>(EntrySaver { entry -> println(entry) })
+ * }
+ * ```
  */
-object Scribe {
-    class Inscribe {
-        var shelves: List<Saver<*>> = emptyList()
-        var imprint: Map<String, JsonElement> = emptyMap()
-        var margins: Margin? = null
-        var onIgnition: ((Throwable) -> Unit)? = null
-    }
+abstract class Scribe {
+    /**
+     * Savers receiving entries emitted by this instance.
+     */
+    protected abstract val shelves: List<Saver<*>>
 
-    internal var config: Inscribe? = null
+    /**
+     * Fields copied into every [Scroll] created by this instance.
+     */
+    protected open val imprint: Map<String, JsonElement> = emptyMap()
+
+    /**
+     * Optional lifecycle enrichment for scrolls created by this instance.
+     */
+    protected open val margins: Margin? = null
+
+    /**
+     * Optional uncaught exception callback.
+     *
+     * Although configured on an instance, uncaught exception handling is a
+     * platform-global hook and should normally be owned by the application.
+     */
+    protected open val onIgnition: ((Throwable) -> Unit)? = null
+
     private var activeQueue: Channel<Entry>? = null
     private var processorJob: Job? = null
+    private var ignitionInstalled: Boolean = false
 
     /**
-     * Initializes the singleton with immutable parameters.
+     * Starts delivery for this runtime instance.
      *
-     * This function can be called again after [retire] has been called.
-     */
-    fun inscribe(block: Inscribe.() -> Unit) {
-        val dsl = Inscribe().apply(block)
-        val configuredShelves = dsl.shelves
-        require(configuredShelves.isNotEmpty()) { "At least one shelf is required." }
-        val onIgnition = dsl.onIgnition
-        if (onIgnition != null) {
-            installUncaughtExceptionHandler(onIgnition)
-        }
-        config = dsl
-    }
-
-    /**
-     * Starts the delivery runtime using previously initialized parameters.
-     *
-     * The provided [channel] becomes disposable and transfers ownership to Scribe.
-     * Scribe closes the channel when the processor completes or when [retire] is called.
+     * The provided [channel] becomes disposable and transfers ownership to this instance.
+     * This instance closes the channel when the processor completes or when [retire] is called.
      * Create a fresh channel for each call to this method.
      */
     fun hire(
@@ -55,13 +64,19 @@ object Scribe {
         channel: Channel<Entry>,
         onSaver: ((saver: Saver<*>, entry: Entry, error: Throwable) -> Unit)? = null,
     ) {
-        val cfg = requireConfig()
+        val configuredShelves = shelves
+        require(configuredShelves.isNotEmpty()) { "At least one shelf is required." }
         check(activeQueue == null) { "Scribe runtime is already active. Call retire() first." }
         check(processorJob?.isActive != true) { "Scribe is still retiring. Wait for pending delivery to finish." }
+        val exceptionHandler = onIgnition
+        if (!ignitionInstalled && exceptionHandler != null) {
+            installUncaughtExceptionHandler(exceptionHandler)
+            ignitionInstalled = true
+        }
         activeQueue = channel
         val createdProcessor = scope.launch {
             for (entry in channel) {
-                cfg.shelves.forEach { saver ->
+                configuredShelves.forEach { saver ->
                     try {
                         when (saver) {
                             is EntrySaver -> saver.write(entry)
@@ -95,14 +110,13 @@ object Scribe {
      * @param id optional custom scroll id. When null, a unique id is generated.
      */
     fun newScroll(id: String? = null): Scroll {
-        val cfg = requireConfig()
         val resolvedId = id ?: newScrollId()
-        val scroll: Scroll = mutableMapOf()
+        val scroll = mutableMapOf<String, JsonElement>()
         scroll["scroll_id"] = JsonPrimitive(resolvedId)
-        cfg.imprint.forEach { (key, value) ->
+        imprint.forEach { (key, value) ->
             scroll[key] = value
         }
-        cfg.margins?.header(scroll)
+        margins?.header(scroll)
         return scroll
     }
 
@@ -119,8 +133,8 @@ object Scribe {
         val queue = activeQueue
         val runningProcessor = processorJob
         if (queue == null && runningProcessor == null) return
-        queue?.close()
         activeQueue = null
+        queue?.close()
         val callerJob = currentCoroutineContext()[Job]
         if (runningProcessor != null && !isProcessorFamily(runningProcessor, callerJob)) {
             runningProcessor.join()
@@ -143,15 +157,15 @@ object Scribe {
     }
 
     /**
-     * Emits a [Note] and suspends until it is enqueued.
+     * Emits a [Note] immediately, blocking only when the channel buffer is full under [BufferOverflow.SUSPEND][kotlinx.coroutines.channels.BufferOverflow.SUSPEND].
      *
      * @param tag logical source/category for the note.
      * @param message note text payload.
      * @param level severity level for the note.
      * @param timestamp epoch milliseconds associated with the note.
      */
-    suspend fun note(tag: String, message: String, level: Urgency = Urgency.INFO, timestamp: Long = nowEpochMs()) {
-        requireActiveQueue().send(
+    fun note(tag: String, message: String, level: Urgency = Urgency.INFO, timestamp: Long = nowEpochMs()) {
+        requireActiveQueue().trySendBlocking(
             Note(
                 tag = tag,
                 message = message,
@@ -161,14 +175,23 @@ object Scribe {
         )
     }
 
-    private fun requireConfig(): Inscribe =
-        config ?: throw IllegalStateException("Scribe is not initialized. Call Scribe.inscribe(...) first.")
-
-    private fun requireActiveQueue(): Channel<Entry> {
-        return activeQueue ?: throw IllegalStateException("Scribe runtime is not active. Call Scribe.hire(...) first.")
+    internal fun applyFooter(scroll: Scroll) {
+        margins?.footer(scroll)
     }
 
-    internal suspend fun enqueue(entry: Entry) {
-        requireActiveQueue().send(entry)
+    private fun requireActiveQueue(): Channel<Entry> {
+        return activeQueue ?: throw IllegalStateException("This Scribe runtime is not active. Call hire(...) first.")
+    }
+
+    internal fun enqueue(entry: Entry) {
+        requireActiveQueue().trySendBlocking(entry)
+    }
+
+    private fun <E> Channel<E>.trySendBlocking(element: E) {
+        val result = trySend(element)
+        if (result.isSuccess) return
+        runBlocking {
+            runCatching { send(element) }
+        }
     }
 }

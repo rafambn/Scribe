@@ -11,9 +11,10 @@ Both implement the sealed `Entry` interface, which is what `EntrySaver` receives
 
 ## Terminology
 
-- `note(...)`: suspending call for a single log entry
+- `note(...)`: emits a single log entry through the active runtime
 - `newScroll(...)`: starts a contextual logging session
-- `seal(...)`: snapshots the current scroll data and emits a `SealedScroll`
+- `seal(scribe, ...)`: applies the supplied runtime's footer, snapshots the
+  current scroll data, and emits a `SealedScroll`
 - `extend(scroll)`: copies missing keys from another scroll into this one
 - `append(key, scroll)`: nests a scroll as a JSON object under the given key
 - `Margin`: hook for writing fields at open/close boundaries
@@ -21,29 +22,47 @@ Both implement the sealed `Entry` interface, which is what `EntrySaver` receives
 
 ## `Scribe`
 
-`Scribe` is the process-wide singleton entry point. It owns:
+`Scribe` is an abstract runtime base class. A user creates one or more objects
+that extend it. Each object owns:
 
 - one or more savers (`shelves`)
 - an optional shared `imprint`
 - optional lifecycle hooks through `Margin`
-- optional uncaught exception wiring through `onIgnition`
+- optional uncaught exception wiring through `onIgnition` (the installed
+  platform hook itself is global)
 
-Initialization is done once with `Scribe.inscribe { ... }`.
+Define runtime configuration with overridden properties:
 
-Delivery is started with `Scribe.hire(...)` and stopped with `retire()`.
+```kotlin
+object CheckoutScribe : Scribe() {
+    override val shelves: List<Saver<*>> = listOf(entrySaver)
+    override val imprint = mapOf("service" to JsonPrimitive("checkout"))
+    override val margins = timingMargin
+}
+```
+
+Delivery is started with `CheckoutScribe.hire(...)` and stopped with
+`CheckoutScribe.retire()`. Different objects can run concurrently without
+sharing queues, savers, or lifecycle.
 
 ## `Scroll`
 
-`Scroll` is a typealias:
+`Scroll` is a typealias for `MutableMap<String, JsonElement>`. Calling
+`newScroll(...)` initializes it with the ID, imprint, and header margin from
+that `Scribe`, but the map does not retain a runtime reference. Supply the
+runtime that should apply its footer and deliver the snapshot to `seal(...)`:
 
 ```kotlin
-typealias Scroll = MutableMap<String, JsonElement>
+val scroll: Scroll = CheckoutScribe.newScroll(id = "checkout-42")
+scroll["gateway"] = JsonPrimitive("stripe")
+scroll.seal(CheckoutScribe) // applies/delivers through CheckoutScribe
 ```
 
-You write JSON-safe values directly into the map.
+It delegates normal mutable map operations, so you write JSON-safe values
+directly into it.
 
 ```kotlin
-val scroll = Scribe.newScroll(id = "checkout-42")
+val scroll = CheckoutScribe.newScroll(id = "checkout-42")
 scroll["gateway"] = JsonPrimitive("stripe")
 scroll["attempt"] = JsonPrimitive(1)
 scroll["retry"] = JsonPrimitive(false)
@@ -59,24 +78,26 @@ val removed = scroll.remove("retryable")
 `scroll.id` reads the generated/custom `scroll_id` field:
 
 ```kotlin
-val scroll = Scribe.newScroll(id = "checkout-42")
+val scroll = CheckoutScribe.newScroll(id = "checkout-42")
 println(scroll.id) // "checkout-42"
 ```
 
-Calling `seal(...)` more than once is allowed. Each call emits a separate `SealedScroll` with the current `success` value and a snapshot of the data at that point.
+Calling `seal(...)` more than once is allowed. Each call emits a separate
+`SealedScroll` through the `Scribe` passed to that call, with the current
+`success` value and a snapshot of the data at that point.
 
-## `Scroll` Extensions
+## `Scroll` Operations
 
-Beyond direct map writes, `Scroll` has two extension functions:
+Beyond direct map writes, `Scroll` has two convenience operations:
 
 ### `extend(scroll)`
 Copies only missing keys from another scroll into this one:
 
 ```kotlin
-val base = Scribe.newScroll(id = "base")
+val base = CheckoutScribe.newScroll(id = "base")
 base["gateway"] = JsonPrimitive("stripe")
 
-val checkout = Scribe.newScroll(id = "checkout-42")
+val checkout = CheckoutScribe.newScroll(id = "checkout-42")
 checkout["attempt"] = JsonPrimitive(1)
 checkout.extend(base) // only copies "gateway" if not already present
 ```
@@ -85,7 +106,7 @@ checkout.extend(base) // only copies "gateway" if not already present
 Nests another scroll as a `JsonObject` under the given key:
 
 ```kotlin
-val meta = mutableMapOf<String, JsonElement>()
+val meta = CheckoutScribe.newScroll(id = "cart-meta")
 meta["item_count"] = JsonPrimitive(3)
 checkout.append("cart", meta)
 // Result: checkout["cart"] = {"item_count": 3}
@@ -109,14 +130,11 @@ val timingMargin = object : Margin {
 
 ## Delivery Configuration
 
-`Scribe` no longer accepts a dedicated delivery config object. You configure queue behavior through the `Channel<Entry>` you pass to `hire(...)`.
+Configure queue behavior through the `Channel<Entry>` passed to an instance's
+`hire(...)`.
 
 ```kotlin
-Scribe.inscribe {
-    shelves = listOf(entrySaver)
-}
-
-Scribe.hire(
+CheckoutScribe.hire(
     channel = Channel(
         capacity = 256,
         onBufferOverflow = BufferOverflow.DROP_OLDEST,
@@ -132,7 +150,7 @@ You can optionally provide a custom `CoroutineScope` to control the lifecycle of
 ```kotlin
 val customScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
-Scribe.hire(
+CheckoutScribe.hire(
     scope = customScope,
     channel = Channel(capacity = 256),
 )
@@ -176,14 +194,14 @@ enum class Urgency {
 ## Failure Handling
 
 ```kotlin
-Scribe.inscribe {
-    shelves = listOf(entrySaver)
-    onIgnition = { throwable ->
+object ApplicationScribe : Scribe() {
+    override val shelves: List<Saver<*>> = listOf(entrySaver)
+    override val onIgnition: ((Throwable) -> Unit)? = { throwable ->
         println("Uncaught exception: ${throwable.message}")
     }
 }
 
-Scribe.hire(
+ApplicationScribe.hire(
     channel = Channel(capacity = 256),
     onSaver = { saver, entry, error ->
         println("Saver $saver failed for $entry: ${error.message}")
@@ -191,4 +209,7 @@ Scribe.hire(
 )
 ```
 
-`onIgnition` handles uncaught exceptions at the platform level. Saver failures are reported by the `onSaver` callback passed to `hire(...)`.
+`onIgnition` is read when that runtime is first hired, but handles uncaught
+exceptions at the platform level. Multiple runtimes should not independently
+claim this application-global hook. Saver failures are reported by the
+`onSaver` callback passed to `hire(...)`.
