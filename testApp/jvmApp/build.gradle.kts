@@ -12,3 +12,9 @@ dependencies {
     implementation(project(":testApp:shared"))
     implementation(compose.desktop.currentOs)
 }
+
+compose.desktop {
+    application {
+        mainClass = "MainKt"
+    }
+}

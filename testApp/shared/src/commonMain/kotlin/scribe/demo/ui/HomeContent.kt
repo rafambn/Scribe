@@ -92,7 +92,7 @@ fun HomeContent(
                 )
                 ActionGroup(
                     title = "Notes",
-                    description = "Standalone events through the suspending note(...) API.",
+                    description = "Standalone events emitted through note(...).",
                     buttons = listOf(
                         "Run note(...)" to onRunNoteScenario,
                         "Run second note(...)" to onRunFlingNoteScenario,

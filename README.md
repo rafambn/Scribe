@@ -44,7 +44,7 @@ Add Scribe to your `commonMain` dependencies:
 kotlin {
     sourceSets {
         commonMain.dependencies {
-            implementation("com.rafambn:scribe:0.3.3")
+            implementation("com.rafambn:scribe:0.4.0")
         }
     }
 }
@@ -92,7 +92,7 @@ scroll["retry"] = JsonPrimitive(false)
 scroll.seal(BillingScribe, success = true)
 ```
 
-Each `Scribe` object has independent configuration and delivery lifecycle. A `Scroll` is bound to the object that created it, so `scroll.seal()` always delivers through that runtime. Each `seal(...)` call emits a separate `SealedScroll` snapshot.
+Each `Scribe` object has independent configuration and delivery lifecycle. A `Scroll` is a mutable JSON-element map initialized by `newScroll(...)`; pass the runtime that should enrich and deliver it to `scroll.seal(scribe, ...)`. Each `seal(...)` call emits a separate `SealedScroll` snapshot.
 
 Choose the saver that matches your output flow:
 

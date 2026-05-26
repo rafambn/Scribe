@@ -38,16 +38,19 @@ CheckoutScribe.hire(
 
 ## Emission APIs
 
-Current emission calls are suspending:
+Current emission calls are non-suspending:
 
 - `note(...)` sends a `Note`
-- `seal(...)` snapshots the current `Scroll` data and sends a `SealedScroll`
+- `seal(scribe, ...)` applies that runtime's footer margin, snapshots the
+  current `Scroll` data, and sends a `SealedScroll`
 
-There are no separate best-effort APIs in this runtime shape.
+Both calls attempt an immediate channel send and block the calling thread if a
+channel configured with `BufferOverflow.SUSPEND` is full. `Saver.write(...)`
+and `retire()` are the suspending parts of the API. There are no separate
+best-effort emission APIs in this runtime shape.
 
 Multiple calls to `seal(...)` on the same `Scroll` are intentional. Each call
-emits a separate `SealedScroll` through the `Scribe` object that originally
-created that scroll.
+emits a separate `SealedScroll` through the `Scribe` passed to that call.
 
 ## Shared Context with `imprint`
 

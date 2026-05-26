@@ -9,7 +9,7 @@ No server or local observability stack is required.
 - An application-owned object extending `Scribe`
 - `note(...)`
 - `newScroll(...)` with generated and custom IDs
-- Direct map-like writes on runtime-bound `Scroll`
+- Direct map-like writes on `Scroll` and explicit delivery runtime selection
 - Map reads/removals before sealing
 - `seal(...)` with success and failure outcomes
 - `Margin.header(...)` and `Margin.footer(...)`
@@ -21,11 +21,11 @@ No server or local observability stack is required.
 
 ## Run The App
 
-From `testApp/`:
+From the repository root:
 
 ```bash
-./amper run -m jvmApp
-./amper run -m androidApp
+./gradlew :testApp:jvmApp:run
+./gradlew :testApp:androidApp:installDebug
 ```
 
 The UI contains demo actions for notes, scrolls, JSON serialization, queue
@@ -47,7 +47,7 @@ Example console output:
 
 ## Inspect Output
 
-For the JVM app, records appear in the terminal where `./amper run -m jvmApp`
+For the JVM app, records appear in the terminal where `./gradlew :testApp:jvmApp:run`
 was started. For Android, view application stdout in Logcat or the run console.
 The iOS run console likewise displays the records.
 

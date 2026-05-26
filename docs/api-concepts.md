@@ -11,9 +11,10 @@ Both implement the sealed `Entry` interface, which is what `EntrySaver` receives
 
 ## Terminology
 
-- `note(...)`: suspending call for a single log entry
+- `note(...)`: emits a single log entry through the active runtime
 - `newScroll(...)`: starts a contextual logging session
-- `seal(...)`: snapshots the current scroll data and emits a `SealedScroll`
+- `seal(scribe, ...)`: applies the supplied runtime's footer, snapshots the
+  current scroll data, and emits a `SealedScroll`
 - `extend(scroll)`: copies missing keys from another scroll into this one
 - `append(key, scroll)`: nests a scroll as a JSON object under the given key
 - `Margin`: hook for writing fields at open/close boundaries
@@ -46,12 +47,15 @@ sharing queues, savers, or lifecycle.
 
 ## `Scroll`
 
-`Scroll` is a map-like class bound to the `Scribe` object that created it:
+`Scroll` is a typealias for `MutableMap<String, JsonElement>`. Calling
+`newScroll(...)` initializes it with the ID, imprint, and header margin from
+that `Scribe`, but the map does not retain a runtime reference. Supply the
+runtime that should apply its footer and deliver the snapshot to `seal(...)`:
 
 ```kotlin
 val scroll: Scroll = CheckoutScribe.newScroll(id = "checkout-42")
 scroll["gateway"] = JsonPrimitive("stripe")
-scroll.seal(CheckoutScribe) // delivers only through CheckoutScribe
+scroll.seal(CheckoutScribe) // applies/delivers through CheckoutScribe
 ```
 
 It delegates normal mutable map operations, so you write JSON-safe values
@@ -78,7 +82,9 @@ val scroll = CheckoutScribe.newScroll(id = "checkout-42")
 println(scroll.id) // "checkout-42"
 ```
 
-Calling `seal(...)` more than once is allowed. Each call emits a separate `SealedScroll` with the current `success` value and a snapshot of the data at that point.
+Calling `seal(...)` more than once is allowed. Each call emits a separate
+`SealedScroll` through the `Scribe` passed to that call, with the current
+`success` value and a snapshot of the data at that point.
 
 ## `Scroll` Operations
 

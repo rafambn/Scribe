@@ -8,7 +8,7 @@ application console. There is no external service to configure.
 
 - `note(...)`
 - `newScroll(...)` with generated and custom IDs
-- Direct runtime-bound `Scroll` map-like writes
+- Direct `Scroll` map-like writes and explicit delivery runtime selection
 - `extend(scroll)` and `append(key, scroll)`
 - Map read/remove operations
 - `seal(...)` success and failure outcomes
@@ -22,14 +22,7 @@ application console. There is no external service to configure.
 ## Run It
 
 ```bash
-cd testApp
-./amper run -m jvm-app
-```
-
-or:
-
-```bash
-./amper run -m android-app
+./gradlew :testApp:jvmApp:run
 ```
 
 The desktop app writes records to the launching terminal. Android and iOS

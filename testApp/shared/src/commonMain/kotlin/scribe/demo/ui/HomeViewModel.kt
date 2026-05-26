@@ -67,7 +67,7 @@ class HomeViewModel {
         )
     }
 
-    fun runNoteScenario() = launchScenario("Suspending note demo") {
+    fun runNoteScenario() = launchScenario("Note emission demo") {
         appScribe.note(
             tag = "checkout",
             message = "Started checkout for premium customer",
@@ -79,10 +79,10 @@ class HomeViewModel {
     fun runFlingNoteScenario() = launchScenario("Second note demo") {
         appScribe.note(
             tag = "queue",
-            message = "Queued retry audit event through the suspending API",
+            message = "Queued retry audit event through note(...)",
             level = Urgency.DEBUG,
         )
-        updateStatus("Ran a second note(...) flow through the suspending API.")
+        updateStatus("Ran a second note(...) flow.")
     }
 
     fun runStringTemplateScenario() = launchScenario("String template scroll demo") {

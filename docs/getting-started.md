@@ -8,7 +8,7 @@ Use the library from shared code in your Kotlin Multiplatform module:
 kotlin {
     sourceSets {
         commonMain.dependencies {
-            implementation("com.rafambn:scribe:0.3.3")
+            implementation("com.rafambn:scribe:0.4.0")
         }
     }
 }
@@ -54,9 +54,10 @@ With the saver above, the log output looks like this:
 
 ## Track a Flow with `Scroll`
 
-`Scroll` is a mutable, map-like context owned by the `Scribe` object that
-created it. Each `seal(...)` call emits a new `SealedScroll` through that
-object's runtime using a snapshot of the scroll data at that moment.
+`Scroll` is a mutable map of JSON elements initialized by `newScroll(...)`.
+When sealing it, supply the `Scribe` runtime that should apply its footer
+margin and deliver the event. Each `seal(...)` call emits a new
+`SealedScroll` using a snapshot of the scroll data at that moment.
 
 You can also merge other scrolls or nest them:
 
