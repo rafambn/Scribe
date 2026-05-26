@@ -18,5 +18,5 @@ dependencyResolutionManagement {
 
 rootProject.name = "ScribeShowcase"
 include(":shared")
-include(":jvm-app")
-include(":android-app")
+include(":jvmApp")
+include(":androidApp")

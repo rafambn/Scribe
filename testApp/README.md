@@ -24,8 +24,8 @@ No server or local observability stack is required.
 From `testApp/`:
 
 ```bash
-./amper run -m jvm-app
-./amper run -m android-app
+./amper run -m jvmApp
+./amper run -m androidApp
 ```
 
 The UI contains demo actions for notes, scrolls, JSON serialization, queue
@@ -47,7 +47,7 @@ Example console output:
 
 ## Inspect Output
 
-For the JVM app, records appear in the terminal where `./amper run -m jvm-app`
+For the JVM app, records appear in the terminal where `./amper run -m jvmApp`
 was started. For Android, view application stdout in Logcat or the run console.
 The iOS run console likewise displays the records.
 
