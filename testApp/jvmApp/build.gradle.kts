@@ -9,6 +9,6 @@ kotlin {
 }
 
 dependencies {
-    implementation(project(":shared"))
+    implementation(project(":testApp:shared"))
     implementation(compose.desktop.currentOs)
 }

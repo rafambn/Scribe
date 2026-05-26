@@ -22,6 +22,6 @@ android {
 }
 
 dependencies {
-    implementation(project(":shared"))
+    implementation(project(":testApp:shared"))
     implementation(libs.androidx.activity.compose)
 }

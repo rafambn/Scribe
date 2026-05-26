@@ -1,5 +1,0 @@
-/.amper
-/build
-/openobserve/.env
-/openobserve/data/*
-!/openobserve/data/.gitkeep
