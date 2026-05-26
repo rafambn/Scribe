@@ -46,7 +46,9 @@ fun consoleRecordFromEntry(
             entry.data["order_id"]?.let { payload["order_id"] = it }
                 ?: entry.data["ordemId"]?.let { payload["order_id"] = it }
             entry.data.forEach { (key, value) ->
-                payload.putIfAbsent(key, value)
+                if (key !in payload) {
+                    payload[key] = value
+                }
             }
             payload
         }
