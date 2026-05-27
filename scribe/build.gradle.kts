@@ -11,7 +11,7 @@ plugins {
 }
 
 group = "com.rafambn"
-version = "0.4.0"
+version = "0.5.0"
 
 kotlin {
     jvm {
@@ -38,6 +38,9 @@ kotlin {
     iosX64()
     iosArm64()
     iosSimulatorArm64()
+    linuxX64()
+    mingwX64()
+    macosArm64()
 
     sourceSets {
         commonMain.dependencies {
