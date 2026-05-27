@@ -13,7 +13,7 @@
   <a href="./LICENSE">
     <img alt="License" src="https://img.shields.io/badge/license-Apache%202.0-blue.svg">
   </a>
-  <img alt="Platform Targets" src="https://img.shields.io/badge/targets-android%20%7C%20jvm%20%7C%20ios-0A7EA4">
+  <img alt="Platform Targets" src="https://img.shields.io/badge/targets-android%20%7C%20jvm%20%7C%20ios%20%7C%20linuxX64%20%7C%20mingwX64%20%7C%20macosArm64-0A7EA4">
 </p>
 
 <p align="center">

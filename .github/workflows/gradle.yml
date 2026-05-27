@@ -28,6 +28,12 @@ jobs:
             os: macos-latest
           - target: testAndroidHostTest
             os: ubuntu-latest
+          - target: :scribe:linuxX64Test
+            os: ubuntu-latest
+          - target: :scribe:macosArm64Test
+            os: macos-latest
+          - target: :scribe:mingwX64Test
+            os: windows-latest
     runs-on: ${{ matrix.os }}
 
     steps:
@@ -38,6 +44,7 @@ jobs:
       with:
         path: |
           ~/.konan
+          ${{ env.USERPROFILE }}\.konan
         key: ${{ runner.os }}-${{ hashFiles('**/.lock') }}
     - name: Set up JDK 17
       uses: actions/setup-java@v3
