@@ -28,11 +28,11 @@ jobs:
             os: macos-latest
           - target: testAndroidHostTest
             os: ubuntu-latest
-          - target: :scribe:compileKotlinLinuxX64
+          - target: :scribe:linuxX64Test
             os: ubuntu-latest
-          - target: :scribe:compileKotlinMacosArm64
+          - target: :scribe:macosArm64Test
             os: macos-latest
-          - target: :scribe:compileKotlinMingwX64
+          - target: :scribe:mingwX64Test
             os: windows-latest
     runs-on: ${{ matrix.os }}
 
