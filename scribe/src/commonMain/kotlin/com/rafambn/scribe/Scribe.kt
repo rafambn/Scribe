@@ -28,7 +28,7 @@ abstract class Scribe {
     /**
      * Archivists receiving structured logs emitted by this instance.
      */
-    protected abstract val shelves: List<Archivist>
+    protected abstract val archivists: List<Archivist>
 
     /**
      * Fields copied into every [Scroll] created by this instance.
@@ -64,7 +64,7 @@ abstract class Scribe {
         channel: Channel<Entry>,
         onArchiveFailure: ((archivist: Archivist, entry: Entry, error: Throwable) -> Unit)? = null,
     ) {
-        val configuredShelves = shelves
+        val configuredShelves = archivists
         require(configuredShelves.isNotEmpty()) { "At least one shelf is required." }
         check(activeQueue == null) { "Scribe runtime is already active. Call retire() first." }
         check(processorJob?.isActive != true) { "Scribe is still retiring. Wait for pending delivery to finish." }

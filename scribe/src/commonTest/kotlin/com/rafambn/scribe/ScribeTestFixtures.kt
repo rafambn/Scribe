@@ -22,7 +22,7 @@ internal fun scribeWithScrollShelves(
     val configuredImprint = imprint
     val configuredMargins = margins
     return object : Scribe() {
-        override val shelves: List<Archivist> = configuredShelves
+        override val archivists: List<Archivist> = configuredShelves
         override val imprint: Map<String, JsonElement> = configuredImprint
         override val margins: Margin? = configuredMargins
     }.also {
@@ -41,7 +41,7 @@ internal fun scribeWithArchivists(
     val configuredImprint = imprint
     val configuredMargins = margins
     return object : Scribe() {
-        override val shelves: List<Archivist> = configuredShelves
+        override val archivists: List<Archivist> = configuredShelves
         override val imprint: Map<String, JsonElement> = configuredImprint
         override val margins: Margin? = configuredMargins
     }.also {

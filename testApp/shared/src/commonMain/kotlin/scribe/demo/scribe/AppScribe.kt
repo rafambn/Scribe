@@ -21,7 +21,7 @@ class AppScribe(onRecord: (Entry) -> Unit) : Scribe() {
 
     var overflowDelay: Boolean = false
 
-    override val shelves = listOf(
+    override val archivists = listOf(
         Archivist { entry ->
             if (entry["tag"]?.jsonPrimitive?.contentOrNull == "archivist_failure") {
                 error("Intentional archivist failure from showcase demo")
