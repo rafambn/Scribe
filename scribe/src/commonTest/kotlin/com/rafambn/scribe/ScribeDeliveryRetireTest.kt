@@ -17,6 +17,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
+import kotlin.time.Duration.Companion.milliseconds
 
 class ScribeDeliveryRetireTest {
     @Test
@@ -41,7 +42,7 @@ class ScribeDeliveryRetireTest {
             assertEquals(2, secondShelf.events.size)
             assertEquals(
                 "second-still-active",
-                secondShelf.events.last().data["scroll_id"]?.jsonPrimitive?.content,
+                secondShelf.events.last()["scroll_id"]?.jsonPrimitive?.content,
             )
         }
     }
@@ -64,24 +65,59 @@ class ScribeDeliveryRetireTest {
     }
 
     @Test
-    fun routes_can_select_notes_scrolls_or_both() {
+    fun scroll_events_reach_scroll_and_entry_savers() {
         runSuspend {
             val scrollShelf = RecordingShelf()
-            val noteSaver = RecordingNoteSaver()
             val allSaver = RecordingEntrySaver()
             val scribe = scribeWithSavers(
-                shelves = listOf(scrollShelf, noteSaver, allSaver),
+                shelves = listOf(scrollShelf, allSaver),
             )
 
-            scribe.note(tag = "payments", message = "started", level = Urgency.INFO, timestamp = 100L)
             scribe.newScroll(id = "scroll-1").seal(scribe)
             scrollShelf.awaitEvents(1)
-            noteSaver.awaitEvents(1)
-            allSaver.awaitEvents(2)
+            allSaver.awaitEvents(1)
             scribe.retire()
 
-            assertTrue(allSaver.events.any { it is Note })
-            assertTrue(allSaver.events.any { it is SealedScroll })
+            assertEquals(1, scrollShelf.events.size)
+            assertEquals(
+                "scroll-1",
+                scrollShelf.events.single()["scroll_id"]?.jsonPrimitive?.content,
+            )
+            val entry = allSaver.events.single() as ScrollEntry
+            assertEquals("scroll-1", entry["scroll_id"]?.jsonPrimitive?.content)
+        }
+    }
+
+    @Test
+    fun custom_entries_are_dispatched_only_to_matching_and_wildcard_savers() {
+        runSuspend {
+            val customEvents = mutableListOf<CustomEntry>()
+            val scrollEvents = mutableListOf<ScrollEntry>()
+            val allEvents = mutableListOf<Entry>()
+            val customWritten = CompletableDeferred<Unit>()
+            val allWritten = CompletableDeferred<Unit>()
+            val scribe = scribeWithSavers(
+                shelves = listOf(
+                    Saver<CustomEntry> {
+                        customEvents += it
+                        customWritten.complete(Unit)
+                    },
+                    Saver<ScrollEntry> { scrollEvents += it },
+                    EntrySaver {
+                        allEvents += it
+                        allWritten.complete(Unit)
+                    },
+                ),
+            )
+
+            scribe.enqueue(CustomEntry("custom"))
+            customWritten.await()
+            allWritten.await()
+            scribe.retire()
+
+            assertEquals(listOf(CustomEntry("custom")), customEvents)
+            assertTrue(scrollEvents.isEmpty())
+            assertEquals(listOf<Entry>(CustomEntry("custom")), allEvents)
         }
     }
 
@@ -112,7 +148,7 @@ class ScribeDeliveryRetireTest {
             val scribe = scribeWithScrollShelves(shelf)
 
             scribe.newScroll(id = "first").seal(scribe)
-            delay(500)
+            delay(500.milliseconds)
             scribe.newScroll(id = "second").seal(scribe)
             shelf.awaitEvents(2)
             scribe.retire()
@@ -136,7 +172,7 @@ class ScribeDeliveryRetireTest {
             shelf.awaitEvents(1)
             scribe.retire()
 
-            assertEquals("scoped", shelf.events.single().data["scroll_id"]?.jsonPrimitive?.content)
+            assertEquals("scoped", shelf.events.single()["scroll_id"]?.jsonPrimitive?.content)
         }
     }
 
@@ -152,23 +188,23 @@ class ScribeDeliveryRetireTest {
             firstWriteStarted.await()
             val retireScope = CoroutineScope(Dispatchers.Default)
             val retireJob = retireScope.launch { scribe.retire() }
-            delay(50)
+            delay(50.milliseconds)
             assertFalse(retireJob.isCompleted)
             gate.complete(Unit)
-            withTimeout(2_000) { retireJob.join() }
+            withTimeout(2_000.milliseconds) { retireJob.join() }
             retireScope.cancel()
-            assertEquals("in-flight", shelf.events.single().data["scroll_id"]?.jsonPrimitive?.content)
+            assertEquals("in-flight", shelf.events.single()["scroll_id"]?.jsonPrimitive?.content)
         }
     }
 
     @Test
-    fun note_throws_after_retire() {
+    fun seal_throws_after_retire() {
         runSuspend {
             val scribe = scribeWithScrollShelves(RecordingShelf())
 
             scribe.retire()
             assertFailsWith<IllegalStateException> {
-                scribe.note(tag = "payments", message = "started", level = Urgency.INFO, timestamp = 123L)
+                scribe.newScroll(id = "after").seal(scribe)
             }
         }
     }
@@ -186,14 +222,14 @@ class ScribeDeliveryRetireTest {
 
             val retireScope = CoroutineScope(Dispatchers.Default)
             val retireJob = retireScope.launch { scribe.retire() }
-            delay(50)
+            delay(50.milliseconds)
             assertFalse(retireJob.isCompleted)
 
             gate.complete(Unit)
-            withTimeout(2_000) { retireJob.join() }
+            withTimeout(2_000.milliseconds) { retireJob.join() }
             retireScope.cancel()
 
-            assertEquals("flush-me", shelf.events.single().data["scroll_id"]?.jsonPrimitive?.content)
+            assertEquals("flush-me", shelf.events.single()["scroll_id"]?.jsonPrimitive?.content)
         }
     }
 
@@ -208,8 +244,8 @@ class ScribeDeliveryRetireTest {
             }
             scribe = scribeWithSavers(shelves = listOf(saver))
 
-            scribe.note(tag = "payments", message = "started", level = Urgency.INFO, timestamp = 1L)
-            withTimeout(2_000) { retired.await() }
+            scribe.newScroll(id = "retire-1").seal(scribe)
+            withTimeout(2_000.milliseconds) { retired.await() }
         }
     }
 
@@ -228,8 +264,8 @@ class ScribeDeliveryRetireTest {
             }
             scribe = scribeWithSavers(shelves = listOf(saver))
 
-            scribe.note(tag = "payments", message = "started", level = Urgency.INFO, timestamp = 2L)
-            withTimeout(2_000) { retired.await() }
+            scribe.newScroll(id = "retire-2").seal(scribe)
+            withTimeout(2_000.milliseconds) { retired.await() }
         }
     }
 
@@ -248,14 +284,15 @@ class ScribeDeliveryRetireTest {
                 },
             )
 
-            scribe.note(tag = "payments", message = "started", level = Urgency.INFO, timestamp = 42L)
+            scribe.newScroll(id = "error-1").seal(scribe)
             recordingSaver.awaitEvents(1)
             scribe.retire()
 
             assertEquals(1, recordingSaver.events.size)
             assertEquals(1, events.size)
             assertEquals(1, errors.size)
-            assertTrue(events.single() is Note)
+            val failedEntry = events.single() as ScrollEntry
+            assertEquals("error-1", failedEntry["scroll_id"]?.jsonPrimitive?.content)
             assertEquals("boom", errors.single().message)
         }
     }
@@ -272,8 +309,8 @@ class ScribeDeliveryRetireTest {
                 },
             )
 
-            scribe.note(tag = "payments", message = "started", level = Urgency.INFO, timestamp = 10L)
-            scribe.note(tag = "payments", message = "continued", level = Urgency.INFO, timestamp = 11L)
+            scribe.newScroll(id = "first").seal(scribe)
+            scribe.newScroll(id = "second").seal(scribe)
             recordingSaver.awaitEvents(2)
             scribe.retire()
 
@@ -294,8 +331,8 @@ class ScribeDeliveryRetireTest {
                 },
             )
 
-            scribe.note(tag = "payments", message = "started", level = Urgency.INFO, timestamp = 12L)
-            delay(50)
+            scribe.newScroll(id = "cancellation-probe").seal(scribe)
+            delay(50.milliseconds)
             scribe.retire()
 
             assertTrue(reportedErrors.isEmpty())

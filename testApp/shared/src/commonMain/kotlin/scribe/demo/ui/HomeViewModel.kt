@@ -1,10 +1,8 @@
 package scribe.demo.ui
 
-import com.rafambn.scribe.Entry
-import com.rafambn.scribe.Note
+import com.rafambn.scribe.ScrollEntry
 import com.rafambn.scribe.Scribe
 import com.rafambn.scribe.Scroll
-import com.rafambn.scribe.Urgency
 import com.rafambn.scribe.id
 import com.rafambn.scribe.seal
 import kotlinx.coroutines.CoroutineScope
@@ -36,6 +34,7 @@ import scribe.demo.data.recordSummary
 import scribe.demo.platformName
 import scribe.demo.scribe.AppScribe
 import kotlin.collections.set
+import kotlin.time.Duration.Companion.milliseconds
 
 class HomeViewModel {
     private val json = Json {
@@ -61,28 +60,28 @@ class HomeViewModel {
             channel = Channel(capacity = 2, onBufferOverflow = BufferOverflow.DROP_OLDEST),
             onSaver = { saver, entry, error ->
                 appendSaverError(
-                    "Saver failure in ${saver::class.simpleName ?: "Saver"} for ${entryKind(entry)}: ${error.message ?: error}",
+                    "Saver failure in ${saver::class.simpleName ?: "Saver"} for ${entryKind()}: ${error.message ?: error}",
                 )
             },
         )
     }
 
-    fun runNoteScenario() = launchScenario("Note emission demo") {
-        appScribe.note(
+    fun runQuickScrollScenario() = launchScenario("Quick scroll emission demo") {
+        emitQuickScroll(
             tag = "checkout",
             message = "Started checkout for premium customer",
-            level = Urgency.INFO,
+            level = "INFO",
         )
-        updateStatus("Ran note(...): a single INFO event was printed through EntrySaver.")
+        updateStatus("Ran a quick scroll: one immediately sealed event printed through EntrySaver.")
     }
 
-    fun runFlingNoteScenario() = launchScenario("Second note demo") {
-        appScribe.note(
+    fun runSecondQuickScrollScenario() = launchScenario("Second quick scroll demo") {
+        emitQuickScroll(
             tag = "queue",
-            message = "Queued retry audit event through note(...)",
-            level = Urgency.DEBUG,
+            message = "Queued retry audit event as an immediately sealed scroll",
+            level = "DEBUG",
         )
-        updateStatus("Ran a second note(...) flow.")
+        updateStatus("Ran a second immediately sealed scroll flow.")
     }
 
     fun runStringTemplateScenario() = launchScenario("String template scroll demo") {
@@ -90,7 +89,7 @@ class HomeViewModel {
         scroll["demo_name"] = JsonPrimitive("string_template_render")
         scroll["message"] = JsonPrimitive("error on order_id=\$order_id")
         scroll["order_id"] = JsonPrimitive(555)
-        sealScroll(scroll, appScribe, success = true)
+        sealScroll(scroll, appScribe)
         appendTimeline(
             title = "Template message preview",
             detail = "Sent scroll with {message: \"error on order_id=\$order_id\", order_id: 555}.",
@@ -115,7 +114,7 @@ class HomeViewModel {
                 featureFlag = "wide-events",
             ),
         )
-        sealScroll(scroll, appScribe, success = true)
+        sealScroll(scroll, appScribe)
         updateStatus("Ran newScroll + map writes + seal for a wide checkout event.")
     }
 
@@ -136,7 +135,7 @@ class HomeViewModel {
             payload = "",
             success = true,
         )
-        sealScroll(scroll, appScribe, success = true)
+        sealScroll(scroll, appScribe)
         updateStatus("Ran custom-id scroll demo with map reads/removals and local active-scroll tracking.")
     }
 
@@ -147,9 +146,10 @@ class HomeViewModel {
         scroll["warehouse"] = JsonPrimitive("gru-1")
         scroll["cache_hit"] = JsonPrimitive(false)
         scroll["failure_reason"] = JsonPrimitive("downstream retry scheduled")
-        sealScroll(scroll, appScribe, success = false)
-        delay(250)
-        updateStatus("Ran Margin header/footer hooks with seal(success = false).")
+        scroll["success"] = JsonPrimitive(false)
+        sealScroll(scroll, appScribe)
+        delay(250.milliseconds)
+        updateStatus("Ran Margin header/footer hooks on a failed scroll, with success recorded as a data field.")
     }
 
     fun runJsonSerializationScenario() = launchScenario("JSON serialization scroll demo") {
@@ -190,22 +190,22 @@ class HomeViewModel {
             "order_snapshot.order_id,order_snapshot.buyer.tier,order_snapshot.line_items[0].sku,order_snapshot.metadata.channel,order_id,buyer_tier,primary_sku,channel,order_item_count,order_tag_count",
         )
 
-        sealScroll(scroll, appScribe, success = true)
+        sealScroll(scroll, appScribe)
         updateStatus("Ran JSON serialization demo with a nested object payload for console inspection.")
     }
 
     fun runEntrySaverScenario() = launchScenario("Unified EntrySaver demo") {
-        appScribe.note(
+        emitQuickScroll(
             tag = "auth",
             message = "Session accepted for staff dashboard",
-            level = Urgency.INFO,
+            level = "INFO",
         )
         val scroll = openScroll(appScribe, id = "session-audit")
         scroll["demo_name"] = JsonPrimitive("entry_saver_demo")
         scroll["role"] = JsonPrimitive("support")
         scroll["elevated_access"] = JsonPrimitive(true)
-        sealScroll(scroll, appScribe, success = true)
-        updateStatus("Ran a mixed note + scroll demo through one EntrySaver path.")
+        sealScroll(scroll, appScribe)
+        updateStatus("Ran two scrolls through one EntrySaver path.")
     }
 
     fun runOverflowScenario() = launchScenario("Overflow demo") {
@@ -214,19 +214,19 @@ class HomeViewModel {
 
         appScribe.overflowDelay = true
         repeat(attempted) { index ->
-            appScribe.note(
+            emitQuickScroll(
                 tag = "buffer",
                 message = "burst event #$index",
-                level = if (index % 3 == 0) Urgency.WARN else Urgency.INFO,
+                level = if (index % 3 == 0) "WARN" else "INFO",
             )
         }
-        delay(1800)
+        delay(1800.milliseconds)
         appScribe.overflowDelay = false
 
         val delivered = printedEvents - baseline
         appendTimeline(
             title = "Overflow result",
-            detail = "Attempted $attempted notes with channel capacity 2 and DROP_OLDEST; delivered $delivered.",
+            detail = "Attempted $attempted quick scrolls with channel capacity 2 and DROP_OLDEST; delivered $delivered.",
             payload = "",
             success = delivered < attempted,
         )
@@ -234,16 +234,16 @@ class HomeViewModel {
     }
 
     fun runSaverFailureScenario() = launchScenario("Saver error demo") {
-        appScribe.note(
+        emitQuickScroll(
             tag = "saver_failure",
             message = "Intentional saver failure probe",
-            level = Urgency.WARN,
+            level = "WARN",
         )
         updateStatus("Saver failure demo ran; onSaver callback captures the injected failure.")
     }
 
     fun runRetireScenario() = launchScenario("retire() demo") {
-        appScribe.note("shutdown", "retire() with light queue", Urgency.INFO)
+        emitQuickScroll("shutdown", "retire() with light queue", "INFO")
         val started = currentEpochMillis()
         appScribe.retire()
         val elapsed = currentEpochMillis() - started
@@ -262,7 +262,7 @@ class HomeViewModel {
 
     fun runPlanRetireScenario() = launchScenario("retire() with backlog demo") {
         repeat(6) { index ->
-            appScribe.note("shutdown", "drain probe #$index", Urgency.INFO)
+            emitQuickScroll("shutdown", "drain probe #$index", "INFO")
         }
         val started = currentEpochMillis()
         appScribe.retire()
@@ -281,10 +281,10 @@ class HomeViewModel {
     }
 
     fun wireIgnitionScenario() = launchScenario("onIgnition wiring") {
-        appScribe.note(
+        emitQuickScroll(
             tag = "ignition",
             message = "onIgnition callback is configured; the demo avoids firing an uncaught exception.",
-            level = Urgency.INFO,
+            level = "INFO",
         )
         _state.update {
             it.copy(
@@ -311,7 +311,7 @@ class HomeViewModel {
             scope = scope,
             onSaver = { saver, entry, error ->
                 appendSaverError(
-                    "Saver failure in ${saver::class.simpleName ?: "Saver"} for ${entryKind(entry)}: ${error.message ?: error}",
+                    "Saver failure in ${saver::class.simpleName ?: "Saver"} for ${entryKind()}: ${error.message ?: error}",
                 )
             },
         )
@@ -351,7 +351,7 @@ class HomeViewModel {
         }
     }
 
-    private fun handleRecord(entry: Entry) {
+    private fun handleRecord(entry: ScrollEntry) {
         val record = consoleRecordFromEntry(
             entry = entry,
             demoName = "shared_session",
@@ -424,15 +424,20 @@ class HomeViewModel {
         return scroll
     }
 
-    private suspend fun sealScroll(scroll: Scroll, scribe: Scribe, success: Boolean) {
-        scroll.seal(scribe, success = success)
+    private fun sealScroll(scroll: Scroll, scribe: Scribe) {
+        scroll.seal(scribe)
         activeScrolls.remove(scroll.id)
         refreshActiveScrolls()
     }
 
-    private fun entryKind(entry: Entry): String =
-        when (entry) {
-            is Note -> "note"
-            else -> "scroll"
-        }
+    private fun entryKind(): String = "scroll"
+
+    private fun emitQuickScroll(tag: String, message: String, level: String) {
+        val scroll = appScribe.newScroll()
+        scroll["demo_name"] = JsonPrimitive("quick_scroll")
+        scroll["tag"] = JsonPrimitive(tag)
+        scroll["message"] = JsonPrimitive(message)
+        scroll["level"] = JsonPrimitive(level)
+        scroll.seal(appScribe)
+    }
 }

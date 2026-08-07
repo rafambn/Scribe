@@ -12,7 +12,7 @@ internal val UUID_REGEX =
     Regex("^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$")
 
 internal fun scribeWithScrollShelves(
-    vararg shelves: ScrollSaver,
+    vararg shelves: Saver<ScrollEntry>,
     imprint: Map<String, JsonElement> = emptyMap(),
     channel: Channel<Entry> = Channel(capacity = 256, onBufferOverflow = BufferOverflow.DROP_OLDEST),
     onSaver: (saver: Saver<*>, entry: Entry, error: Throwable) -> Unit = { _, _, _ -> },
@@ -51,7 +51,7 @@ internal fun scribeWithSavers(
 
 internal fun <T> runSuspend(block: suspend () -> T): T = runBlocking { block() }
 
-internal fun createScribeInHelperAndEmit(shelf: ScrollSaver): Scribe {
+internal fun createScribeInHelperAndEmit(shelf: Saver<ScrollEntry>): Scribe {
     val scribe = scribeWithScrollShelves(shelf)
     scribe.newScroll(id = "scoped").seal(scribe)
     return scribe
@@ -67,7 +67,7 @@ internal class PaymentService {
             scroll["gateway"] = JsonPrimitive("stripe")
         } catch (t: Throwable) {
             scroll["error_stage"] = JsonPrimitive("gateway_call")
-            scroll.seal(scribe, success = false)
+            scroll.seal(scribe)
             throw t
         }
     }
@@ -76,13 +76,13 @@ internal class PaymentService {
 @Serializable
 internal data class GatewayMeta(val retries: Int)
 
-internal data class NonSerializableMeta(val retries: Int)
-
-internal class RecordingShelf : ScrollSaver {
-    val events = mutableListOf<SealedScroll>()
+internal class RecordingShelf : Saver<ScrollEntry> {
+    val events = mutableListOf<ScrollEntry>()
     private val writes = Channel<Unit>(Channel.UNLIMITED)
 
-    override suspend fun write(event: SealedScroll) {
+    override val accepts get() = ScrollEntry::class
+
+    override suspend fun write(event: ScrollEntry) {
         events += event
         writes.trySend(Unit)
     }
@@ -97,29 +97,15 @@ internal class RecordingShelf : ScrollSaver {
 internal class BlockingShelf(
     private val gate: CompletableDeferred<Unit>,
     private val firstWriteStarted: CompletableDeferred<Unit>? = null,
-) : ScrollSaver {
-    val events = mutableListOf<SealedScroll>()
+) : Saver<ScrollEntry> {
+    val events = mutableListOf<ScrollEntry>()
     private val writes = Channel<Unit>(Channel.UNLIMITED)
 
-    override suspend fun write(event: SealedScroll) {
+    override val accepts get() = ScrollEntry::class
+
+    override suspend fun write(event: ScrollEntry) {
         firstWriteStarted?.complete(Unit)
         gate.await()
-        events += event
-        writes.trySend(Unit)
-    }
-
-    suspend fun awaitEvents(count: Int) {
-        repeat(count) {
-            writes.receive()
-        }
-    }
-}
-
-internal class RecordingNoteSaver : NoteSaver {
-    val events = mutableListOf<Note>()
-    private val writes = Channel<Unit>(Channel.UNLIMITED)
-
-    override suspend fun write(event: Note) {
         events += event
         writes.trySend(Unit)
     }

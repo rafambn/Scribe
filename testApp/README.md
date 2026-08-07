@@ -7,11 +7,11 @@ No server or local observability stack is required.
 ## What This Demo Covers
 
 - An application-owned object extending `Scribe`
-- `note(...)`
+- Quick scrolls: immediately sealed one-shot events
 - `newScroll(...)` with generated and custom IDs
 - Direct map-like writes on `Scroll` and explicit delivery runtime selection
 - Map reads/removals before sealing
-- `seal(...)` with success and failure outcomes
+- `seal(...)` snapshots and fail-styled scrolls (via data fields)
 - `Margin.header(...)` and `Margin.footer(...)`
 - `EntrySaver`
 - Channel overflow behavior through `DROP_OLDEST`
@@ -28,7 +28,7 @@ From the repository root:
 ./gradlew :testApp:androidApp:installDebug
 ```
 
-The UI contains demo actions for notes, scrolls, JSON serialization, queue
+The UI contains demo actions for quick scrolls, wide events, JSON serialization, queue
 delivery, saver failures, and runtime shutdown. Each delivered `Entry` is
 rendered as JSON and printed to stdout, while the most recent records remain
 visible in the in-app timeline.
@@ -40,7 +40,6 @@ Example console output:
   "event_kind": "scroll",
   "demo_name": "checkout_scroll",
   "scroll_id": "checkout-42",
-  "success": true,
   "gateway": "stripe"
 }
 ```
@@ -58,10 +57,9 @@ Useful fields include:
 - `platform`
 - `app_version`
 - `saver_type`
-- `tag`, `message`, `level`
-- `scroll_id`, `success`
-- Scroll fields such as `gateway`, `order_id`, `order_snapshot`, and `elapsed_ms`
+- `scroll_id`
+- Scroll fields such as `tag`, `level`, `success`, `gateway`, `order_id`, `order_snapshot`, and `elapsed_ms`
 
 The overflow scenario intentionally slows the console saver while using a small
-dropping channel; fewer printed records than attempted notes demonstrates the
+dropping channel; fewer printed records than attempted quick scrolls demonstrates the
 configured overflow behavior.

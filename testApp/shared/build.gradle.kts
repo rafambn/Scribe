@@ -13,14 +13,13 @@ kotlin {
         compileSdk = libs.versions.android.compileSdk.get().toInt()
         minSdk = libs.versions.android.minSdk.get().toInt()
     }
-    iosX64()
     iosArm64()
     iosSimulatorArm64()
 
     sourceSets {
         commonMain.dependencies {
-            api(compose.foundation)
-            implementation(compose.material3)
+            api("org.jetbrains.compose.foundation:foundation:1.11.1")
+            implementation(libs.material3)
             implementation(project(":scribe"))
             implementation(libs.kotlinx.serialization.json)
             implementation(libs.kotlinx.coroutines.core)

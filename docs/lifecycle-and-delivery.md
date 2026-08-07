@@ -38,19 +38,18 @@ CheckoutScribe.hire(
 
 ## Emission APIs
 
-Current emission calls are non-suspending:
+Current emission calls are non-suspending and always produce scroll events:
 
-- `note(...)` sends a `Note`
 - `seal(scribe, ...)` applies that runtime's footer margin, snapshots the
-  current `Scroll` data, and sends a `SealedScroll`
+  current `Scroll` data, and sends the resulting `Entry`
 
-Both calls attempt an immediate channel send and block the calling thread if a
+Calls attempt an immediate channel send and block the calling thread if a
 channel configured with `BufferOverflow.SUSPEND` is full. `Saver.write(...)`
 and `retire()` are the suspending parts of the API. There are no separate
 best-effort emission APIs in this runtime shape.
 
 Multiple calls to `seal(...)` on the same `Scroll` are intentional. Each call
-emits a separate `SealedScroll` through the `Scribe` passed to that call.
+emits a separate `Entry` through the `Scribe` passed to that call.
 
 ## Shared Context with `imprint`
 
@@ -58,7 +57,7 @@ emits a separate `SealedScroll` through the `Scribe` passed to that call.
 
 ```kotlin
 object CheckoutScribe : Scribe() {
-    override val shelves: List<Saver<*>> = listOf(ScrollSaver { println(it) })
+    override val shelves: List<Saver<*>> = listOf(Saver<ScrollEntry> { println(it) })
     override val imprint = mapOf(
         "app" to JsonPrimitive("checkout"),
         "region" to JsonPrimitive("us-east-1"),
@@ -68,7 +67,7 @@ object CheckoutScribe : Scribe() {
 CheckoutScribe.hire(channel = Channel(capacity = 256))
 ```
 
-These values are inserted into the scroll map and then appear in `SealedScroll.data`.
+These values are inserted into the scroll map and then appear in the delivered `Entry`.
 
 ## Open and Close Hooks with `Margin`
 
@@ -86,7 +85,7 @@ val timingMargin = object : Margin {
 }
 
 object CheckoutScribe : Scribe() {
-    override val shelves: List<Saver<*>> = listOf(ScrollSaver { println(it) })
+    override val shelves: List<Saver<*>> = listOf(Saver<ScrollEntry> { println(it) })
     override val margins = timingMargin
 }
 

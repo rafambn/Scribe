@@ -2,19 +2,17 @@
 
 ## Core Types
 
-Scribe models logging with two event shapes:
+Scribe models logging with typed entries:
 
-- `Note`: a single standalone event
-- `SealedScroll`: a sealed snapshot result of a multi-step `Scroll`
-
-Both implement the sealed `Entry` interface, which is what `EntrySaver` receives.
+- `Scroll`: a mutable JSON-map you build up and then pass to `seal(...)`
+- `Entry`: the open base interface for every payload sent through a runtime
+- `ScrollEntry`: the immutable map snapshot produced by sealing a `Scroll`
 
 ## Terminology
 
-- `note(...)`: emits a single log entry through the active runtime
 - `newScroll(...)`: starts a contextual logging session
-- `seal(scribe, ...)`: applies the supplied runtime's footer, snapshots the
-  current scroll data, and emits a `SealedScroll`
+- `seal(scribe)`: applies the supplied runtime's footer, snapshots the
+  current scroll data, and emits a `ScrollEntry`
 - `extend(scroll)`: copies missing keys from another scroll into this one
 - `append(key, scroll)`: nests a scroll as a JSON object under the given key
 - `Margin`: hook for writing fields at open/close boundaries
@@ -83,8 +81,8 @@ println(scroll.id) // "checkout-42"
 ```
 
 Calling `seal(...)` more than once is allowed. Each call emits a separate
-`SealedScroll` through the `Scribe` passed to that call, with the current
-`success` value and a snapshot of the data at that point.
+`ScrollEntry` through the `Scribe` passed to that call, with a snapshot of the data
+at that point.
 
 ## `Scroll` Operations
 
@@ -117,7 +115,7 @@ checkout.append("cart", meta)
 `Margin` enriches a scroll at beginning and end.
 
 ```kotlin
-val timingMargin = object : Margin {
+val margin = object : Margin {
     override fun header(scroll: Scroll) {
         scroll["started_at"] = JsonPrimitive(1000)
     }
@@ -158,37 +156,16 @@ CheckoutScribe.hire(
 
 ## Event Shapes
 
-```kotlin
-Note(
-    tag = "payments",
-    message = "starting checkout",
-    level = Urgency.INFO,
-    timestamp = 1710000000000L,
-)
-```
+The standard delivered event is a sealed `Scroll` snapshot. Fields written to
+the scroll via normal map operations appear directly in the delivered `ScrollEntry`:
 
 ```kotlin
-SealedScroll(
-    success = true,
-    data = mapOf(
+ScrollEntry(
+    mapOf(
         "scroll_id" to JsonPrimitive("checkout-42"),
         "gateway" to JsonPrimitive("stripe"),
     ),
 )
-```
-
-## Urgency Levels
-
-`Urgency` is used by `Note` to indicate severity:
-
-```kotlin
-enum class Urgency {
-    VERBOSE,
-    DEBUG,
-    INFO,
-    WARN,
-    ERROR
-}
 ```
 
 ## Failure Handling

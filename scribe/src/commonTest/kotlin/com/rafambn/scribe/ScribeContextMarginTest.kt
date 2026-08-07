@@ -23,8 +23,8 @@ class ScribeContextMarginTest {
             scribe.retire()
 
             val event = shelf.events.single()
-            assertEquals(JsonPrimitive("mobile-app"), event.data["service"])
-            assertEquals(JsonPrimitive("production"), event.data["environment"])
+            assertEquals(JsonPrimitive("mobile-app"), event["service"])
+            assertEquals(JsonPrimitive("production"), event["environment"])
         }
     }
 
@@ -40,13 +40,13 @@ class ScribeContextMarginTest {
             shelf.awaitEvents(2)
             scribe.retire()
 
-            val firstEvent = shelf.events.firstOrNull { it.data["scroll_id"]?.jsonPrimitive?.content == "first" }
-            val secondEvent = shelf.events.firstOrNull { it.data["scroll_id"]?.jsonPrimitive?.content == "second" }
+            val firstEvent = shelf.events.firstOrNull { it["scroll_id"]?.jsonPrimitive?.content == "first" }
+            val secondEvent = shelf.events.firstOrNull { it["scroll_id"]?.jsonPrimitive?.content == "second" }
 
             assertNotNull(firstEvent)
             assertNotNull(secondEvent)
-            assertEquals(JsonPrimitive("us-east"), firstEvent.data["region"])
-            assertEquals(JsonPrimitive("us-east"), secondEvent.data["region"])
+            assertEquals(JsonPrimitive("us-east"), firstEvent["region"])
+            assertEquals(JsonPrimitive("us-east"), secondEvent["region"])
         }
     }
 
@@ -64,8 +64,8 @@ class ScribeContextMarginTest {
             scribe.retire()
 
             val event = shelf.events.single()
-            assertEquals(JsonPrimitive("ap-south"), event.data["region"])
-            assertEquals(JsonPrimitive("ap-south"), event.data["region"])
+            assertEquals(JsonPrimitive("ap-south"), event["region"])
+            assertEquals(JsonPrimitive("ap-south"), event["region"])
         }
     }
 
@@ -89,8 +89,8 @@ class ScribeContextMarginTest {
             scribe.retire()
 
             val event = shelf.events.single()
-            assertEquals(JsonPrimitive(1000L), event.data["startedAtEpochMs"])
-            assertEquals(JsonPrimitive(2000L), event.data["sealedAtEpochMs"])
+            assertEquals(JsonPrimitive(1000L), event["startedAtEpochMs"])
+            assertEquals(JsonPrimitive(2000L), event["sealedAtEpochMs"])
         }
     }
 
@@ -105,8 +105,8 @@ class ScribeContextMarginTest {
             scribe.retire()
 
             val event = shelf.events.single()
-            assertFalse(event.data.containsKey("startedAtEpochMs"))
-            assertFalse(event.data.containsKey("sealedAtEpochMs"))
+            assertFalse(event.containsKey("startedAtEpochMs"))
+            assertFalse(event.containsKey("sealedAtEpochMs"))
         }
     }
 
@@ -133,8 +133,8 @@ class ScribeContextMarginTest {
             scribe.retire()
 
             val event = shelf.events.single()
-            assertEquals(JsonPrimitive(500L), event.data["elapsedMs"])
-            assertFalse(event.data.containsKey("_startTime"))
+            assertEquals(JsonPrimitive(500L), event["elapsedMs"])
+            assertFalse(event.containsKey("_startTime"))
         }
     }
 

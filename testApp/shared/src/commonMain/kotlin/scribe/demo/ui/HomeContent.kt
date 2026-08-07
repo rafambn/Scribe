@@ -43,8 +43,8 @@ fun HomeContent(
     saverErrors: List<String>,
     lastRecord: String,
     timeline: List<TimelineItem>,
-    onRunNoteScenario: () -> Unit,
-    onRunFlingNoteScenario: () -> Unit,
+    onRunQuickScrollScenario: () -> Unit,
+    onRunSecondQuickScrollScenario: () -> Unit,
     onRunCheckoutScenario: () -> Unit,
     onRunInspectionScenario: () -> Unit,
     onRunMarginScenario: () -> Unit,
@@ -91,11 +91,11 @@ fun HomeContent(
                     busyLabel = busyLabel,
                 )
                 ActionGroup(
-                    title = "Notes",
-                    description = "Standalone events emitted through note(...).",
+                    title = "Quick Scrolls",
+                    description = "Immediately sealed one-shot scroll events.",
                     buttons = listOf(
-                        "Run note(...)" to onRunNoteScenario,
-                        "Run second note(...)" to onRunFlingNoteScenario,
+                        "Emit quick scroll" to onRunQuickScrollScenario,
+                        "Emit second quick scroll" to onRunSecondQuickScrollScenario,
                     ),
                     enabled = !isBusy,
                 )
@@ -120,7 +120,7 @@ fun HomeContent(
                 )
                 ActionGroup(
                     title = "Savers And Delivery",
-                    description = "Use the three saver types, queue overflow behavior, and saver error handling.",
+                    description = "Use the saver types, queue overflow behavior, and saver error handling.",
                     buttons = listOf(
                         "EntrySaver mixed flow" to onRunEntrySaverScenario,
                         "Overflow demo" to onRunOverflowScenario,
@@ -162,7 +162,7 @@ private fun HeroCard() {
                 fontWeight = FontWeight.Bold,
             )
             Text(
-                text = "Guided demos for notes, wide events, margins, queue delivery, and saver behavior. Every delivered record is printed to the console.",
+                text = "Guided demos for quick scrolls, wide events, margins, queue delivery, and saver behavior. Every delivered record is printed to the console.",
                 color = Color(0xFFE7ECEF),
                 style = MaterialTheme.typography.bodyLarge,
             )

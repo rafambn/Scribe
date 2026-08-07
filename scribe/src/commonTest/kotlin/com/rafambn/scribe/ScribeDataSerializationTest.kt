@@ -21,7 +21,7 @@ class ScribeDataSerializationTest {
             scribe.retire()
 
             val event = shelf.events.single()
-            assertEquals(JsonObject(mapOf("retries" to JsonPrimitive(2))), event.data["meta"])
+            assertEquals(JsonObject(mapOf("retries" to JsonPrimitive(2))), event["meta"])
         }
     }
 
@@ -41,9 +41,9 @@ class ScribeDataSerializationTest {
             scribe.retire()
 
             val event = shelf.events.single()
-            assertEquals(JsonPrimitive("accepted"), event.data["message"])
-            assertEquals(JsonPrimitive(3), event.data["attempt"])
-            assertEquals(JsonPrimitive(false), event.data["retry"])
+            assertEquals(JsonPrimitive("accepted"), event["message"])
+            assertEquals(JsonPrimitive(3), event["attempt"])
+            assertEquals(JsonPrimitive(false), event["retry"])
         }
     }
 
@@ -99,7 +99,7 @@ class ScribeDataSerializationTest {
             scribe.retire()
 
             val event = shelf.events.single()
-            assertEquals(JsonPrimitive("value"), event.data["key"])
+            assertEquals(JsonPrimitive("value"), event["key"])
         }
     }
 

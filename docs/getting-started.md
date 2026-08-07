@@ -8,7 +8,7 @@ Use the library from shared code in your Kotlin Multiplatform module:
 kotlin {
     sourceSets {
         commonMain.dependencies {
-            implementation("com.rafambn:scribe:0.4.0")
+            implementation("com.rafambn:scribe:0.5.0")
         }
     }
 }
@@ -21,8 +21,8 @@ object's runtime with a `Channel<Entry>`.
 
 ```kotlin
 object AppScribe : Scribe() {
-    override val shelves: List<Saver<*>> = listOf(NoteSaver { note ->
-        println("[${note.level}] ${note.tag}: ${note.message}")
+    override val shelves: List<Saver<*>> = listOf(Saver<ScrollEntry> { scroll ->
+        println(scroll)
     })
 }
 
@@ -36,28 +36,29 @@ AppScribe.hire(
 
 ## Emit a Single Event
 
-Use `note(...)` for standalone events:
+Every event is a scroll. For a standalone event, build a scroll and seal it
+immediately:
 
 ```kotlin
-AppScribe.note(
-    tag = "payments",
-    message = "starting checkout",
-    level = Urgency.INFO,
-)
+val scroll = AppScribe.newScroll()
+scroll["tag"] = JsonPrimitive("payments")
+scroll["message"] = JsonPrimitive("starting checkout")
+scroll["level"] = JsonPrimitive("INFO")
+scroll.seal(AppScribe)
 ```
 
 With the saver above, the log output looks like this:
 
 ```text
-[INFO] payments: starting checkout
+{scroll_id=..., tag=payments, message=starting checkout, level=INFO}
 ```
 
 ## Track a Flow with `Scroll`
 
 `Scroll` is a mutable map of JSON elements initialized by `newScroll(...)`.
 When sealing it, supply the `Scribe` runtime that should apply its footer
-margin and deliver the event. Each `seal(...)` call emits a new
-`SealedScroll` using a snapshot of the scroll data at that moment.
+margin and deliver the event. Each `seal(...)` call emits a new snapshot of
+the scroll data at that moment.
 
 You can also merge other scrolls or nest them:
 
@@ -82,7 +83,7 @@ scroll["cart"] = Json.encodeToJsonElement(
     CheckoutMeta.serializer(),
     CheckoutMeta(itemCount = 3, subtotalCents = 249_900, featureFlag = "wide-events"),
 )
-scroll.seal(AppScribe, success = true)
+scroll.seal(AppScribe)
 ```
 
 ## Use Multiple Runtimes
@@ -105,21 +106,18 @@ AnalyticsScribe.hire(channel = Channel(256))
 
 Retiring `PaymentsScribe` does not stop `AnalyticsScribe`.
 
-The emitted `SealedScroll` shape:
+The emitted event shape is the scroll map itself:
 
 ```json
 {
-  "success": true,
-  "data": {
-    "scroll_id": "checkout-42",
-    "gateway": "stripe",
-    "attempt": 1,
-    "retry": false,
-    "cart": {
-      "item_count": 3,
-      "subtotal_cents": 249900,
-      "feature_flag": "wide-events"
-    }
+  "scroll_id": "checkout-42",
+  "gateway": "stripe",
+  "attempt": 1,
+  "retry": false,
+  "cart": {
+    "item_count": 3,
+    "subtotal_cents": 249900,
+    "feature_flag": "wide-events"
   }
 }
 ```
@@ -127,14 +125,16 @@ The emitted `SealedScroll` shape:
 ## Choose the Right Saver
 
 ```kotlin
-val noteSaver = NoteSaver { note -> println(note) }
-val scrollSaver = ScrollSaver { scroll -> println(scroll) }
+val scrollSaver = Saver<ScrollEntry> { scroll -> println(scroll) }
 val entrySaver = EntrySaver { entry -> println(entry) }
+
+data class AuditEntry(val message: String) : Entry
+val auditSaver = Saver<AuditEntry> { audit -> println(audit.message) }
 ```
 
-- `NoteSaver` handles only `Note`
-- `ScrollSaver` handles only `SealedScroll`
-- `EntrySaver` handles both
+- `Saver<ScrollEntry>` handles scroll snapshots
+- `Saver<T>` handles entries whose runtime type is exactly `T`
+- `EntrySaver` is the wildcard and handles every entry from the runtime
 
 ## What to Read Next
 

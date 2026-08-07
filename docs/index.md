@@ -26,10 +26,9 @@ A Kotlin Multiplatform logging library for structured events and long-lived cont
 
 Modern systems do not fail in one place. A single user action can cross services, queues, retries, feature flags, and third-party calls. Traditional logging turns that into dozens of partial lines, each easy to write and hard to query.
 
-Scribe is built around the argument from [loggingsucks.com](https://loggingsucks.com/): useful logs are not just structured, they are context-rich. Instead of scattering breadcrumbs everywhere, Scribe gives you primitives for both shapes you actually need:
+Scribe is built around the argument from [loggingsucks.com](https://loggingsucks.com/): useful logs are not just structured, they are context-rich. Instead of scattering breadcrumbs everywhere, Scribe gives you one primitive for the shape you actually need:
 
-- `Note` for one-off events that stand on their own (Old way, if you still insist)
-- `Scroll` for building a wide event over the lifetime of an operation, then sealing it as a `SealedScroll`
+- `Scroll` for building a wide event over the lifetime of an operation, then sealing it as a delivered `Entry` snapshot
 
 That pushes logging toward "what happened to this request or workflow?" instead of "what line of code ran next?". The result is fewer events, better context, and logs that are easier to filter, correlate, and analyze.
 

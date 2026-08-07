@@ -77,12 +77,10 @@ abstract class Scribe {
         val createdProcessor = scope.launch {
             for (entry in channel) {
                 configuredShelves.forEach { saver ->
+                    if (saver.accepts != null && saver.accepts != entry::class) return@forEach
                     try {
-                        when (saver) {
-                            is EntrySaver -> saver.write(entry)
-                            is ScrollSaver if entry is SealedScroll -> saver.write(entry)
-                            is NoteSaver if entry is Note -> saver.write(entry)
-                        }
+                        @Suppress("UNCHECKED_CAST")
+                        (saver as Saver<Entry>).write(entry)
                     } catch (e: CancellationException) {
                         throw e
                     } catch (e: Throwable) {
@@ -156,25 +154,6 @@ abstract class Scribe {
         return false
     }
 
-    /**
-     * Emits a [Note] immediately, blocking only when the channel buffer is full under [BufferOverflow.SUSPEND][kotlinx.coroutines.channels.BufferOverflow.SUSPEND].
-     *
-     * @param tag logical source/category for the note.
-     * @param message note text payload.
-     * @param level severity level for the note.
-     * @param timestamp epoch milliseconds associated with the note.
-     */
-    fun note(tag: String, message: String, level: Urgency = Urgency.INFO, timestamp: Long = nowEpochMs()) {
-        requireActiveQueue().trySendBlocking(
-            Note(
-                tag = tag,
-                message = message,
-                level = level,
-                timestamp = timestamp,
-            ),
-        )
-    }
-
     internal fun applyFooter(scroll: Scroll) {
         margins?.footer(scroll)
     }
@@ -183,7 +162,7 @@ abstract class Scribe {
         return activeQueue ?: throw IllegalStateException("This Scribe runtime is not active. Call hire(...) first.")
     }
 
-    internal fun enqueue(entry: Entry) {
+    fun enqueue(entry: Entry) {
         requireActiveQueue().trySendBlocking(entry)
     }
 
