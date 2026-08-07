@@ -21,7 +21,7 @@ object's runtime with a `Channel<Entry>`.
 
 ```kotlin
 object AppScribe : Scribe() {
-    override val shelves: List<Saver<*>> = listOf(Saver<ScrollEntry> { scroll ->
+    override val shelves: List<Archivist> = listOf(Archivist { scroll ->
         println(scroll)
     })
 }
@@ -47,7 +47,7 @@ scroll["level"] = JsonPrimitive("INFO")
 scroll.seal(AppScribe)
 ```
 
-With the saver above, the log output looks like this:
+With the archivist above, the log output looks like this:
 
 ```text
 {scroll_id=..., tag=payments, message=starting checkout, level=INFO}
@@ -93,11 +93,11 @@ application may supply a configured object to a component.
 
 ```kotlin
 object PaymentsScribe : Scribe() {
-    override val shelves: List<Saver<*>> = listOf(EntrySaver { sendPaymentsRecord(it) })
+    override val shelves: List<Archivist> = listOf(Archivist { sendPaymentsRecord(it) })
 }
 
 object AnalyticsScribe : Scribe() {
-    override val shelves: List<Saver<*>> = listOf(EntrySaver { sendAnalyticsRecord(it) })
+    override val shelves: List<Archivist> = listOf(Archivist { sendAnalyticsRecord(it) })
 }
 
 PaymentsScribe.hire(channel = Channel(256))
@@ -122,21 +122,17 @@ The emitted event shape is the scroll map itself:
 }
 ```
 
-## Choose the Right Saver
+## Choose the Right Archivist
 
 ```kotlin
-val scrollSaver = Saver<ScrollEntry> { scroll -> println(scroll) }
-val entrySaver = EntrySaver { entry -> println(entry) }
-
-data class AuditEntry(val message: String) : Entry
-val auditSaver = Saver<AuditEntry> { audit -> println(audit.message) }
+val scrollArchivist = Archivist { scroll -> println(scroll) }
 ```
 
-- `Saver<ScrollEntry>` handles scroll snapshots
-- `Saver<T>` handles entries whose runtime type is exactly `T`
-- `EntrySaver` is the wildcard and handles every entry from the runtime
+- Every archivist receives `Entry` snapshots
+- `Archivist` is a functional interface: `Archivist { entry -> ... }` is all you need
+- Add multiple savers to a `Scribe` object to fan out to several outputs
 
 ## What to Read Next
 
 - [API Concepts](api-concepts.md) for the core types and terminology
-- [Lifecycle and Delivery](lifecycle-and-delivery.md) for channel behavior, margins, shutdown, and saver error callbacks
+- [Lifecycle and Delivery](lifecycle-and-delivery.md) for channel behavior, margins, shutdown, and archivist error callbacks

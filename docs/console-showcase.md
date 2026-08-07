@@ -13,9 +13,9 @@ application console. There is no external service to configure.
 - Map read/remove operations
 - `seal(...)` snapshots and fail-styled scrolls (via data fields)
 - `Margin`
-- `EntrySaver`
+- `Archivist` fanned out across multiple outputs
 - Channel overflow behavior through `DROP_OLDEST`
-- Saver error callbacks
+- Archivist error callbacks
 - `retire()` and runtime re-hire
 - Safe `onIgnition` wiring
 
@@ -35,9 +35,9 @@ records are available through their platform run consoles.
 3. Run `Margins + seal(failure)` and verify timing fields plus the `failure_reason`/`success=false` data markers.
 4. Run `JSON object serialization` to inspect a nested payload.
 5. Run `String template message` to inspect the `message` and `order_id` fields.
-6. Run `EntrySaver mixed flow` to print two scroll shapes through one saver.
+6. Run `Archivist mixed flow` to print two scroll shapes through one archivist.
 7. Run `Overflow demo` and observe that a burst can be trimmed under pressure.
-8. Run `Saver failure demo` and observe the printed saver error while delivery continues.
+8. Run `Archivist failure demo` and observe the printed archivist error while delivery continues.
 9. Compare `retire() (light queue)` with `retire() with backlog`.
 
 The in-app timeline mirrors delivered console records for convenient inspection.

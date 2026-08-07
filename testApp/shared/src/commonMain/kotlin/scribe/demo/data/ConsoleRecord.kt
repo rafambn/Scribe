@@ -1,6 +1,6 @@
 package scribe.demo.data
 
-import com.rafambn.scribe.ScrollEntry
+import com.rafambn.scribe.Entry
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.contentOrNull
@@ -9,10 +9,10 @@ import kotlinx.serialization.json.jsonPrimitive
 typealias ConsoleRecord = Map<String, JsonElement>
 
 fun consoleRecordFromEntry(
-    entry: ScrollEntry,
+    entry: Entry,
     demoName: String,
     platform: String,
-    saverType: String,
+    archivistType: String,
     appVersion: String,
     recordedAt: Long,
 ): ConsoleRecord {
@@ -22,7 +22,7 @@ fun consoleRecordFromEntry(
     payload["demo_name"] = JsonPrimitive(stringField(entry, "demo_name") ?: demoName)
     payload["platform"] = JsonPrimitive(platform)
     payload["app_version"] = JsonPrimitive(appVersion)
-    payload["saver_type"] = JsonPrimitive(saverType)
+    payload["archivist_type"] = JsonPrimitive(archivistType)
     payload["scroll_id"] = JsonPrimitive(stringField(entry, "scroll_id") ?: "missing-scroll-id")
     stringField(entry, "message")?.let { payload["message"] = JsonPrimitive(it) }
     entry["order_id"]?.let { payload["order_id"] = it }

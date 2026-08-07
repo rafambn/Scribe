@@ -1,6 +1,6 @@
 package scribe.demo.ui
 
-import com.rafambn.scribe.ScrollEntry
+import com.rafambn.scribe.Entry
 import com.rafambn.scribe.Scribe
 import com.rafambn.scribe.Scroll
 import com.rafambn.scribe.id
@@ -58,9 +58,9 @@ class HomeViewModel {
         appScribe.hire(
             scope = scope,
             channel = Channel(capacity = 2, onBufferOverflow = BufferOverflow.DROP_OLDEST),
-            onSaver = { saver, entry, error ->
-                appendSaverError(
-                    "Saver failure in ${saver::class.simpleName ?: "Saver"} for ${entryKind()}: ${error.message ?: error}",
+            onArchiveFailure = { archivist, entry, error ->
+                appendArchivistError(
+                    "Archivist failure in ${archivist::class.simpleName ?: "Archivist"} for ${entryKind()}: ${error.message ?: error}",
                 )
             },
         )
@@ -72,7 +72,7 @@ class HomeViewModel {
             message = "Started checkout for premium customer",
             level = "INFO",
         )
-        updateStatus("Ran a quick scroll: one immediately sealed event printed through EntrySaver.")
+        updateStatus("Ran a quick scroll: one immediately sealed event printed through Archivist.")
     }
 
     fun runSecondQuickScrollScenario() = launchScenario("Second quick scroll demo") {
@@ -194,18 +194,18 @@ class HomeViewModel {
         updateStatus("Ran JSON serialization demo with a nested object payload for console inspection.")
     }
 
-    fun runEntrySaverScenario() = launchScenario("Unified EntrySaver demo") {
+    fun runArchivistScenario() = launchScenario("Unified Archivist demo") {
         emitQuickScroll(
             tag = "auth",
             message = "Session accepted for staff dashboard",
             level = "INFO",
         )
         val scroll = openScroll(appScribe, id = "session-audit")
-        scroll["demo_name"] = JsonPrimitive("entry_saver_demo")
+        scroll["demo_name"] = JsonPrimitive("entry_archivist_demo")
         scroll["role"] = JsonPrimitive("support")
         scroll["elevated_access"] = JsonPrimitive(true)
         sealScroll(scroll, appScribe)
-        updateStatus("Ran two scrolls through one EntrySaver path.")
+        updateStatus("Ran two scrolls through one Archivist path.")
     }
 
     fun runOverflowScenario() = launchScenario("Overflow demo") {
@@ -233,13 +233,13 @@ class HomeViewModel {
         updateStatus("Ran overflow demo with Channel(..., onBufferOverflow = DROP_OLDEST).")
     }
 
-    fun runSaverFailureScenario() = launchScenario("Saver error demo") {
+    fun runArchivistFailureScenario() = launchScenario("Archivist error demo") {
         emitQuickScroll(
-            tag = "saver_failure",
-            message = "Intentional saver failure probe",
+            tag = "archivist_failure",
+            message = "Intentional archivist failure probe",
             level = "WARN",
         )
-        updateStatus("Saver failure demo ran; onSaver callback captures the injected failure.")
+        updateStatus("Archivist failure demo ran; onArchivist callback captures the injected failure.")
     }
 
     fun runRetireScenario() = launchScenario("retire() demo") {
@@ -309,9 +309,9 @@ class HomeViewModel {
         appScribe.hire(
             channel = Channel(capacity = 2, onBufferOverflow = BufferOverflow.DROP_OLDEST),
             scope = scope,
-            onSaver = { saver, entry, error ->
-                appendSaverError(
-                    "Saver failure in ${saver::class.simpleName ?: "Saver"} for ${entryKind()}: ${error.message ?: error}",
+            onArchiveFailure = { archivist, entry, error ->
+                appendArchivistError(
+                    "Archivist failure in ${archivist::class.simpleName ?: "Archivist"} for ${entryKind()}: ${error.message ?: error}",
                 )
             },
         )
@@ -351,12 +351,12 @@ class HomeViewModel {
         }
     }
 
-    private fun handleRecord(entry: ScrollEntry) {
+    private fun handleRecord(entry: Entry) {
         val record = consoleRecordFromEntry(
             entry = entry,
             demoName = "shared_session",
             platform = platform,
-            saverType = "EntrySaver",
+            archivistType = "Archivist",
             appVersion = appVersion,
             recordedAt = currentEpochMillis(),
         )
@@ -371,7 +371,7 @@ class HomeViewModel {
             )
         }
         appendTimeline(
-            title = "${payloadEventKind(record)} via EntrySaver",
+            title = "${payloadEventKind(record)} via Archivist",
             detail = "${recordSummary(record)}. Printed to console.",
             payload = payload,
             success = true,
@@ -386,15 +386,15 @@ class HomeViewModel {
         }
     }
 
-    private fun appendSaverError(message: String) {
+    private fun appendArchivistError(message: String) {
         println(message)
         _state.update {
             it.copy(
-                saverErrors = listOf(message) + it.saverErrors.take(5),
+                archivistErrors = listOf(message) + it.archivistErrors.take(5),
             )
         }
         appendTimeline(
-            title = "Saver failure captured",
+            title = "Archivist failure captured",
             detail = message,
             payload = "",
             success = false,

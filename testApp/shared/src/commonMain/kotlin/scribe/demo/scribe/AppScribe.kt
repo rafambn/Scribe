@@ -1,10 +1,10 @@
 package scribe.demo.scribe
 
-import com.rafambn.scribe.EntrySaver
+import com.rafambn.scribe.Archivist
 import com.rafambn.scribe.Margin
 import com.rafambn.scribe.Scribe
 import com.rafambn.scribe.Scroll
-import com.rafambn.scribe.ScrollEntry
+import com.rafambn.scribe.Entry
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -17,19 +17,19 @@ import scribe.demo.data.sampleImprint
 import scribe.demo.platformName
 import kotlin.time.Duration.Companion.milliseconds
 
-class AppScribe(onRecord: (ScrollEntry) -> Unit) : Scribe() {
+class AppScribe(onRecord: (Entry) -> Unit) : Scribe() {
 
     var overflowDelay: Boolean = false
 
     override val shelves = listOf(
-        EntrySaver { entry ->
-            if (entry is ScrollEntry && entry["tag"]?.jsonPrimitive?.contentOrNull == "saver_failure") {
-                error("Intentional saver failure from showcase demo")
+        Archivist { entry ->
+            if (entry["tag"]?.jsonPrimitive?.contentOrNull == "archivist_failure") {
+                error("Intentional archivist failure from showcase demo")
             }
         },
-        EntrySaver { entry ->
+        Archivist { entry ->
             if (overflowDelay) delay(220.milliseconds)
-            if (entry is ScrollEntry) onRecord(entry)
+            onRecord(entry)
         },
     )
 

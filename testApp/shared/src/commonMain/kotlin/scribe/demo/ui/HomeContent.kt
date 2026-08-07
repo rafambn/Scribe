@@ -40,7 +40,7 @@ fun HomeContent(
     isRetired: Boolean,
     ignitionMessage: String,
     activeScrollIds: List<String>,
-    saverErrors: List<String>,
+    archivistErrors: List<String>,
     lastRecord: String,
     timeline: List<TimelineItem>,
     onRunQuickScrollScenario: () -> Unit,
@@ -50,9 +50,9 @@ fun HomeContent(
     onRunMarginScenario: () -> Unit,
     onRunJsonSerializationScenario: () -> Unit,
     onRunStringTemplateScenario: () -> Unit,
-    onRunEntrySaverScenario: () -> Unit,
+    onRunArchivistScenario: () -> Unit,
     onRunOverflowScenario: () -> Unit,
-    onRunSaverFailureScenario: () -> Unit,
+    onRunArchivistFailureScenario: () -> Unit,
     onRehireMainScribe: () -> Unit,
     onRunRetireScenario: () -> Unit,
     onRunPlanRetireScenario: () -> Unit,
@@ -86,7 +86,7 @@ fun HomeContent(
                     isRetired = isRetired,
                     ignitionMessage = ignitionMessage,
                     activeScrollIds = activeScrollIds,
-                    saverErrors = saverErrors,
+                    archivistErrors = archivistErrors,
                     isBusy = isBusy,
                     busyLabel = busyLabel,
                 )
@@ -119,12 +119,12 @@ fun HomeContent(
                     enabled = !isBusy,
                 )
                 ActionGroup(
-                    title = "Savers And Delivery",
-                    description = "Use the saver types, queue overflow behavior, and saver error handling.",
+                    title = "Archivists And Delivery",
+                    description = "Use the archivist types, queue overflow behavior, and archivist error handling.",
                     buttons = listOf(
-                        "EntrySaver mixed flow" to onRunEntrySaverScenario,
+                        "Archivist mixed flow" to onRunArchivistScenario,
                         "Overflow demo" to onRunOverflowScenario,
-                        "Saver failure demo" to onRunSaverFailureScenario,
+                        "Archivist failure demo" to onRunArchivistFailureScenario,
                     ),
                     enabled = !isBusy,
                 )
@@ -162,7 +162,7 @@ private fun HeroCard() {
                 fontWeight = FontWeight.Bold,
             )
             Text(
-                text = "Guided demos for quick scrolls, wide events, margins, queue delivery, and saver behavior. Every delivered record is printed to the console.",
+                text = "Guided demos for quick scrolls, wide events, margins, queue delivery, and archivist behavior. Every delivered record is printed to the console.",
                 color = Color(0xFFE7ECEF),
                 style = MaterialTheme.typography.bodyLarge,
             )
@@ -182,7 +182,7 @@ private fun StatusCard(
     isRetired: Boolean,
     ignitionMessage: String,
     activeScrollIds: List<String>,
-    saverErrors: List<String>,
+    archivistErrors: List<String>,
     isBusy: Boolean,
     busyLabel: String,
 ) {
@@ -206,9 +206,9 @@ private fun StatusCard(
                     style = MaterialTheme.typography.bodyMedium,
                 )
             }
-            if (saverErrors.isNotEmpty()) {
+            if (archivistErrors.isNotEmpty()) {
                 Text(
-                    "Saver errors: ${saverErrors.joinToString()}",
+                    "Archivist errors: ${archivistErrors.joinToString()}",
                     style = MaterialTheme.typography.bodyMedium,
                     color = Color(0xFF9C2F2F),
                 )

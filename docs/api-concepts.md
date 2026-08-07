@@ -2,21 +2,20 @@
 
 ## Core Types
 
-Scribe models logging with typed entries:
+Scribe models logging with structured scroll events:
 
 - `Scroll`: a mutable JSON-map you build up and then pass to `seal(...)`
-- `Entry`: the open base interface for every payload sent through a runtime
-- `ScrollEntry`: the immutable map snapshot produced by sealing a `Scroll`
+- `Entry`: typealias for `Map<String, JsonElement>`, the immutable snapshot produced by sealing a `Scroll` and delivered through a runtime's savers
 
 ## Terminology
 
 - `newScroll(...)`: starts a contextual logging session
 - `seal(scribe)`: applies the supplied runtime's footer, snapshots the
-  current scroll data, and emits a `ScrollEntry`
+  current scroll data, and emits an `Entry`
 - `extend(scroll)`: copies missing keys from another scroll into this one
 - `append(key, scroll)`: nests a scroll as a JSON object under the given key
 - `Margin`: hook for writing fields at open/close boundaries
-- `hire(channel = ..., scope = ..., onSaver = ...)`: starts delivery over your channel configuration
+- `hire(channel = ..., scope = ..., onArchivist = ...)`: starts delivery over your channel configuration
 
 ## `Scribe`
 
@@ -33,7 +32,7 @@ Define runtime configuration with overridden properties:
 
 ```kotlin
 object CheckoutScribe : Scribe() {
-    override val shelves: List<Saver<*>> = listOf(entrySaver)
+    override val shelves: List<Archivist> = listOf(Archivist { entry -> println(entry) })
     override val imprint = mapOf("service" to JsonPrimitive("checkout"))
     override val margins = timingMargin
 }
@@ -81,7 +80,7 @@ println(scroll.id) // "checkout-42"
 ```
 
 Calling `seal(...)` more than once is allowed. Each call emits a separate
-`ScrollEntry` through the `Scribe` passed to that call, with a snapshot of the data
+`Entry` through the `Scribe` passed to that call, with a snapshot of the data
 at that point.
 
 ## `Scroll` Operations
@@ -137,8 +136,8 @@ CheckoutScribe.hire(
         capacity = 256,
         onBufferOverflow = BufferOverflow.DROP_OLDEST,
     ),
-    onSaver = { saver, entry, error ->
-        println("Saver $saver failed for $entry: $error")
+    onArchivist = { archivist, entry, error ->
+        println("Archivist $archivist failed for $entry: $error")
     },
 )
 ```
@@ -157,14 +156,13 @@ CheckoutScribe.hire(
 ## Event Shapes
 
 The standard delivered event is a sealed `Scroll` snapshot. Fields written to
-the scroll via normal map operations appear directly in the delivered `ScrollEntry`:
+the scroll via normal map operations appear directly in the delivered `Entry`,
+which is a `Map<String, JsonElement>`:
 
 ```kotlin
-ScrollEntry(
-    mapOf(
-        "scroll_id" to JsonPrimitive("checkout-42"),
-        "gateway" to JsonPrimitive("stripe"),
-    ),
+mapOf(
+    "scroll_id" to JsonPrimitive("checkout-42"),
+    "gateway" to JsonPrimitive("stripe"),
 )
 ```
 
@@ -172,7 +170,7 @@ ScrollEntry(
 
 ```kotlin
 object ApplicationScribe : Scribe() {
-    override val shelves: List<Saver<*>> = listOf(entrySaver)
+    override val shelves: List<Archivist> = listOf(Archivist { entry -> println(entry) })
     override val onIgnition: ((Throwable) -> Unit)? = { throwable ->
         println("Uncaught exception: ${throwable.message}")
     }
@@ -180,13 +178,13 @@ object ApplicationScribe : Scribe() {
 
 ApplicationScribe.hire(
     channel = Channel(capacity = 256),
-    onSaver = { saver, entry, error ->
-        println("Saver $saver failed for $entry: ${error.message}")
+    onArchivist = { archivist, entry, error ->
+        println("Archivist $archivist failed for $entry: ${error.message}")
     },
 )
 ```
 
 `onIgnition` is read when that runtime is first hired, but handles uncaught
 exceptions at the platform level. Multiple runtimes should not independently
-claim this application-global hook. Saver failures are reported by the
-`onSaver` callback passed to `hire(...)`.
+claim this application-global hook. Archivist failures are reported by the
+`onArchivist` callback passed to `hire(...)`.

@@ -14,21 +14,21 @@ import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonPrimitive
 
 /**
- * Independent event writer that creates [Scroll]s and dispatches [Entry] objects to configured savers.
+ * Independent structured log writer that creates [Scroll]s and dispatches [Entry] snapshots to configured archivists.
  *
  * Create an object that extends this type and override its configuration:
  *
  * ```
  * object AppScribe : Scribe() {
- *     override val shelves = listOf<EntrySaver>(EntrySaver { entry -> println(entry) })
+ *     override val shelves = listOf<Archivist>(Archivist { entry -> println(entry) })
  * }
  * ```
  */
 abstract class Scribe {
     /**
-     * Savers receiving entries emitted by this instance.
+     * Archivists receiving structured logs emitted by this instance.
      */
-    protected abstract val shelves: List<Saver<*>>
+    protected abstract val shelves: List<Archivist>
 
     /**
      * Fields copied into every [Scroll] created by this instance.
@@ -62,7 +62,7 @@ abstract class Scribe {
     fun hire(
         scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Default),
         channel: Channel<Entry>,
-        onSaver: ((saver: Saver<*>, entry: Entry, error: Throwable) -> Unit)? = null,
+        onArchiveFailure: ((archivist: Archivist, entry: Entry, error: Throwable) -> Unit)? = null,
     ) {
         val configuredShelves = shelves
         require(configuredShelves.isNotEmpty()) { "At least one shelf is required." }
@@ -76,16 +76,14 @@ abstract class Scribe {
         activeQueue = channel
         val createdProcessor = scope.launch {
             for (entry in channel) {
-                configuredShelves.forEach { saver ->
-                    if (saver.accepts != null && saver.accepts != entry::class) return@forEach
+                configuredShelves.forEach { archivist ->
                     try {
-                        @Suppress("UNCHECKED_CAST")
-                        (saver as Saver<Entry>).write(entry)
+                        archivist.write(entry)
                     } catch (e: CancellationException) {
                         throw e
                     } catch (e: Throwable) {
                         try {
-                            onSaver?.invoke(saver, entry, e)
+                            onArchiveFailure?.invoke(archivist, entry, e)
                         } catch (_: Throwable) {
                             // Ignore callback failures to keep delivery alive.
                         }
@@ -119,12 +117,12 @@ abstract class Scribe {
     }
 
     /**
-     * Stops accepting entries, closes the delivery channel, and waits for queued events to finish delivery.
+     * Stops accepting structured logs, closes the delivery channel, and waits for queued logs to finish delivery.
      *
      * The channel passed to [hire] is closed and must not be reused.
      * After this call completes, you may call [hire] again with a fresh channel.
      *
-     * If called from within the processor coroutine (e.g., from a saver),
+     * If called from within the processor coroutine (e.g., from a archivist),
      * this function returns immediately without waiting to avoid deadlocks.
      */
     suspend fun retire() {

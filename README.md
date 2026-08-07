@@ -32,7 +32,7 @@
 
 - Story-driven logging primitives instead of flat logger calls
 - Contextual logging with `newScroll(...)` and immediate-seal one-shot scrolls
-- Delivery hooks through typed `Saver<T>` instances and `EntrySaver`
+- Delivery hooks through `Archivist` instances receiving `Entry` snapshots
 - Scroll lifecycle enrichment through `Margin`
 - Independent `Scribe` objects for applications and imported libraries
 
@@ -56,8 +56,8 @@ Create a `Scribe` object, hire its runtime, and emit a scroll:
 
 ```kotlin
 object AppScribe : Scribe() {
-    override val shelves: List<Saver<*>> = listOf(
-        Saver<ScrollEntry> { scroll ->
+    override val shelves: List<Archivist> = listOf(
+        Archivist { scroll ->
             println(scroll)
         }
     )
@@ -75,8 +75,8 @@ Use a scroll when you need shared context for a longer flow:
 
 ```kotlin
 object BillingScribe : Scribe() {
-    override val shelves: List<Saver<*>> = listOf(
-        Saver<ScrollEntry> { scroll -> println(scroll) }
+    override val shelves: List<Archivist> = listOf(
+        Archivist { scroll -> println(scroll) }
     )
     override val imprint = mapOf(
         "service" to JsonPrimitive("billing"),
@@ -94,9 +94,8 @@ scroll.seal(BillingScribe)
 
 Each `Scribe` object has independent configuration and delivery lifecycle. A `Scroll` is a mutable JSON-element map initialized by `newScroll(...)`; pass the runtime that should enrich and deliver it to `scroll.seal(scribe)`. Each `seal(...)` call emits a separate snapshot of the scroll data.
 
-Choose the saver that matches your output flow:
+Choose the archivist that matches your output flow:
 
 ```kotlin
-val scrollSaver = Saver<ScrollEntry> { scroll -> println(scroll) }
-val entrySaver = EntrySaver { record -> println(record) }
+val scrollArchivist = Archivist { scroll -> println(scroll) }
 ```

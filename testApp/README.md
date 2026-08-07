@@ -13,9 +13,9 @@ No server or local observability stack is required.
 - Map reads/removals before sealing
 - `seal(...)` snapshots and fail-styled scrolls (via data fields)
 - `Margin.header(...)` and `Margin.footer(...)`
-- `EntrySaver`
+- `Archivist` fanned out across multiple outputs
 - Channel overflow behavior through `DROP_OLDEST`
-- Saver failure reporting through `hire(onSaver = ...)`
+- Archivist failure reporting through `hire(onArchivist = ...)`
 - `retire()` and runtime re-hire
 - `onIgnition` wiring without intentionally crashing the app
 
@@ -29,7 +29,7 @@ From the repository root:
 ```
 
 The UI contains demo actions for quick scrolls, wide events, JSON serialization, queue
-delivery, saver failures, and runtime shutdown. Each delivered `Entry` is
+delivery, archivist failures, and runtime shutdown. Each delivered `Entry` is
 rendered as JSON and printed to stdout, while the most recent records remain
 visible in the in-app timeline.
 
@@ -60,6 +60,6 @@ Useful fields include:
 - `scroll_id`
 - Scroll fields such as `tag`, `level`, `success`, `gateway`, `order_id`, `order_snapshot`, and `elapsed_ms`
 
-The overflow scenario intentionally slows the console saver while using a small
+The overflow scenario intentionally slows the console archivist while using a small
 dropping channel; fewer printed records than attempted quick scrolls demonstrates the
 configured overflow behavior.

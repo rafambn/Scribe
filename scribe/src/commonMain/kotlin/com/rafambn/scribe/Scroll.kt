@@ -8,15 +8,18 @@ import kotlinx.serialization.json.JsonPrimitive
 
 typealias Scroll = MutableMap<String, JsonElement>
 
+/** Immutable structured log emitted when a [Scroll] is sealed. */
+typealias Entry = Map<String, JsonElement>
+
 val Scroll.id: String
     get() = this["scroll_id"]?.let { (it as? JsonPrimitive)?.content } ?: error("Invalid scroll id metadata.")
 
 @OptIn(ExperimentalUuidApi::class)
 internal fun newScrollId(): String = Uuid.random().toString()
 
-fun Scroll.seal(scribe: Scribe): ScrollEntry {
+fun Scroll.seal(scribe: Scribe): Entry {
     scribe.applyFooter(this)
-    val result = ScrollEntry(toMap())
+    val result: Entry = toMap()
     scribe.enqueue(result)
     return result
 }

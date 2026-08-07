@@ -2,7 +2,7 @@
 
 ## Delivery Pipeline
 
-A `Scribe` object delivers entries through the `Channel<Entry>` provided to
+A `Scribe` object delivers `Entry` snapshots through the `Channel<Entry>` provided to
 `hire(...)`. The channel is disposable and transfers ownership to that object,
 which closes it on processor completion or `retire()`. Different `Scribe`
 objects may be hired concurrently with independent channels.
@@ -20,7 +20,7 @@ CheckoutScribe.hire(
 
 ```kotlin
 object CheckoutScribe : Scribe() {
-    override val shelves: List<Saver<*>> = listOf(EntrySaver { entry ->
+    override val shelves: List<Archivist> = listOf(Archivist { entry ->
         println(entry)
     })
 }
@@ -30,8 +30,8 @@ CheckoutScribe.hire(
         capacity = 256,
         onBufferOverflow = BufferOverflow.DROP_OLDEST,
     ),
-    onSaver = { saver, entry, error ->
-        println("Saver $saver failed for $entry: ${error.message}")
+    onArchivist = { archivist, entry, error ->
+        println("Archivist $archivist failed for $entry: ${error.message}")
     },
 )
 ```
@@ -44,7 +44,7 @@ Current emission calls are non-suspending and always produce scroll events:
   current `Scroll` data, and sends the resulting `Entry`
 
 Calls attempt an immediate channel send and block the calling thread if a
-channel configured with `BufferOverflow.SUSPEND` is full. `Saver.write(...)`
+channel configured with `BufferOverflow.SUSPEND` is full. `Archivist.write(...)`
 and `retire()` are the suspending parts of the API. There are no separate
 best-effort emission APIs in this runtime shape.
 
@@ -57,7 +57,7 @@ emits a separate `Entry` through the `Scribe` passed to that call.
 
 ```kotlin
 object CheckoutScribe : Scribe() {
-    override val shelves: List<Saver<*>> = listOf(Saver<ScrollEntry> { println(it) })
+    override val shelves: List<Archivist> = listOf(Archivist { println(it) })
     override val imprint = mapOf(
         "app" to JsonPrimitive("checkout"),
         "region" to JsonPrimitive("us-east-1"),
@@ -85,7 +85,7 @@ val timingMargin = object : Margin {
 }
 
 object CheckoutScribe : Scribe() {
-    override val shelves: List<Saver<*>> = listOf(Saver<ScrollEntry> { println(it) })
+    override val shelves: List<Archivist> = listOf(Archivist { println(it) })
     override val margins = timingMargin
 }
 
@@ -111,7 +111,7 @@ platform uncaught exception hook when that object is first hired:
 
 ```kotlin
 object ApplicationScribe : Scribe() {
-    override val shelves: List<Saver<*>> = listOf(EntrySaver { println(it) })
+    override val shelves: List<Archivist> = listOf(Archivist { println(it) })
     override val onIgnition: ((Throwable) -> Unit)? = { throwable ->
         println("Uncaught exception: ${throwable.message}")
     }
@@ -119,5 +119,5 @@ object ApplicationScribe : Scribe() {
 ```
 
 This hook is platform-global even though the property is declared by one
-runtime object. Saver-level failures are handled separately by `onSaver` passed
+runtime object. Archivist-level failures are handled separately by `onArchivist` passed
 to `hire(...)`.
