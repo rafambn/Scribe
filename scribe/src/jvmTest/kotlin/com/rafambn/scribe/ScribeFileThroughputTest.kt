@@ -1,6 +1,7 @@
 package com.rafambn.scribe
 
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
@@ -52,7 +53,11 @@ class ScribeFileThroughputTest {
     @Test
     fun measure_concurrent_file_throughput() = runBlocking {
         val archivist = FileArchivist(testFile, json)
-        val scribe = scribeWithScrollShelves(archivist, channel = Channel(Channel.UNLIMITED))
+        val scribe = scribeWithScrollShelves(
+            archivist,
+            bufferCapacity = Channel.UNLIMITED,
+            bufferOverflow = BufferOverflow.SUSPEND,
+        )
         val iterations = 50_000
         val coroutines = 10
 

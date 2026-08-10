@@ -1,17 +1,25 @@
 package com.rafambn.scribe
 
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonPrimitive
+import kotlin.concurrent.atomics.AtomicBoolean
+import kotlin.concurrent.atomics.ExperimentalAtomicApi
 
 /**
  * Independent structured log writer that creates [Scroll]s and dispatches [Entry] snapshots to configured archivists.
@@ -20,15 +28,28 @@ import kotlinx.serialization.json.JsonPrimitive
  *
  * ```
  * object AppScribe : Scribe() {
- *     override val shelves = listOf<Archivist>(Archivist { entry -> println(entry) })
+ *     override val bufferCapacity = 256
+ *     override val bufferOverflow = BufferOverflow.DROP_OLDEST
+ *     override val onArchiveFailure: ((Archivist, Entry, Throwable) -> Unit)? = null
+ *     override val archivists = listOf<Archivist>(Archivist { entry -> println(entry) })
  * }
  * ```
  */
+@OptIn(ExperimentalAtomicApi::class)
 abstract class Scribe {
     /**
      * Archivists receiving structured logs emitted by this instance.
      */
     protected abstract val archivists: List<Archivist>
+
+    /** Maximum number of entries retained by this instance's private buffer. */
+    protected abstract val bufferCapacity: Int
+
+    /** Overflow behavior used when this instance's private buffer is full. */
+    protected abstract val bufferOverflow: BufferOverflow
+
+    /** Callback invoked when an archivist fails to write an entry. */
+    protected abstract val onArchiveFailure: ((archivist: Archivist, entry: Entry, error: Throwable) -> Unit)?
 
     /**
      * Fields copied into every [Scroll] created by this instance.
@@ -48,56 +69,71 @@ abstract class Scribe {
      */
     protected open val onIgnition: ((Throwable) -> Unit)? = null
 
-    private var activeQueue: Channel<Entry>? = null
-    private var processorJob: Job? = null
-    private var ignitionInstalled: Boolean = false
+    private val queue: Channel<Entry> by lazy {
+        Channel(
+            capacity = bufferCapacity,
+            onBufferOverflow = bufferOverflow,
+        )
+    }
+    private val ownedScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    private val intakeOpen = AtomicBoolean(true)
+    private val processingEnabled = MutableStateFlow(false)
+    private val retiring = AtomicBoolean(false)
+    private val ignitionInstalled = AtomicBoolean(false)
+    private val retirementCompleted = CompletableDeferred<Unit>()
+    private val processorJob: Job by lazy {
+        ownedScope.launch {
+            try {
+                for (entry in queue) {
+                    processingEnabled.first { it }
+                    archive(archivists, entry)
+                }
+            } finally {
+                processingEnabled.value = false
+            }
+        }
+    }
+
+    /** Whether new entries are currently accepted into the private buffer. */
+    val isIntakeOpen: Boolean
+        get() = intakeOpen.load() && !retiring.load()
+
+    /** Whether buffered entries are currently being processed. */
+    val isProcessing: Boolean
+        get() = processingEnabled.value
 
     /**
-     * Starts delivery for this runtime instance.
+     * Starts or resumes delivery from this instance's private buffer.
      *
-     * The provided [channel] becomes disposable and transfers ownership to this instance.
-     * This instance closes the channel when the processor completes or when [retire] is called.
-     * Create a fresh channel for each call to this method.
+     * Entries can be accepted before this method is called. Calling this method while processing
+     * is already active has no effect. After [dismiss], this method resumes processing.
      */
-    fun hire(
-        scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Default),
-        channel: Channel<Entry>,
-        onArchiveFailure: ((archivist: Archivist, entry: Entry, error: Throwable) -> Unit)? = null,
-    ) {
-        val configuredShelves = archivists
-        require(configuredShelves.isNotEmpty()) { "At least one shelf is required." }
-        check(activeQueue == null) { "Scribe runtime is already active. Call retire() first." }
-        check(processorJob?.isActive != true) { "Scribe is still retiring. Wait for pending delivery to finish." }
+    fun hire() {
+        val configuredArchivists = archivists
+        require(configuredArchivists.isNotEmpty()) { "At least one archivist is required." }
+        check(!retiring.load()) { "This Scribe has been retired." }
         val exceptionHandler = onIgnition
-        if (!ignitionInstalled && exceptionHandler != null) {
+        if (exceptionHandler != null && ignitionInstalled.compareAndSet(expectedValue = false, newValue = true)) {
             installUncaughtExceptionHandler(exceptionHandler)
-            ignitionInstalled = true
         }
-        activeQueue = channel
-        val createdProcessor = scope.launch {
-            for (entry in channel) {
-                configuredShelves.forEach { archivist ->
-                    try {
-                        archivist.write(entry)
-                    } catch (e: CancellationException) {
-                        throw e
-                    } catch (e: Throwable) {
-                        try {
-                            onArchiveFailure?.invoke(archivist, entry, e)
-                        } catch (_: Throwable) {
-                            // Ignore callback failures to keep delivery alive.
-                        }
-                    }
-                }
-            }
+
+        val processor = processorJob
+        processingEnabled.value = true
+        if (processor.isCompleted) {
+            processingEnabled.value = false
+            error("The Scribe processor has terminated and cannot be restarted.")
         }
-        processorJob = createdProcessor
-        createdProcessor.invokeOnCompletion {
-            channel.close()
-            if (processorJob === createdProcessor) {
-                processorJob = null
-            }
-        }
+    }
+
+    /** Allows new entries to be accepted into the private buffer. */
+    fun openIntake() {
+        check(!retiring.load()) { "This Scribe has been retired." }
+        intakeOpen.store(true)
+    }
+
+    /** Stops accepting new entries without changing processing of entries already buffered. */
+    fun closeIntake() {
+        intakeOpen.store(false)
     }
 
     /**
@@ -117,23 +153,39 @@ abstract class Scribe {
     }
 
     /**
-     * Stops accepting structured logs, closes the delivery channel, and waits for queued logs to finish delivery.
-     *
-     * The channel passed to [hire] is closed and must not be reused.
-     * After this call completes, you may call [hire] again with a fresh channel.
-     *
-     * If called from within the processor coroutine (e.g., from a archivist),
-     * this function returns immediately without waiting to avoid deadlocks.
+     * Cooperatively pauses delivery, preserving queued entries.
+     * Intake remains independently controlled by [openIntake] and [closeIntake]. Call [hire] to
+     * resume processing.
+     */
+    fun dismiss() {
+        processingEnabled.value = false
+    }
+
+    /**
+     * Permanently closes intake, drains every accepted entry, and releases the owned runtime.
+     * This is the terminal lifecycle operation; neither intake nor processing can restart afterward.
      */
     suspend fun retire() {
-        val queue = activeQueue
-        val runningProcessor = processorJob
-        if (queue == null && runningProcessor == null) return
-        activeQueue = null
-        queue?.close()
         val callerJob = currentCoroutineContext()[Job]
-        if (runningProcessor != null && !isProcessorFamily(runningProcessor, callerJob)) {
-            runningProcessor.join()
+        check(!isProcessorFamily(processorJob, callerJob)) {
+            "retire() cannot be called from an archivist; request it from the lifecycle owner."
+        }
+
+        if (!retiring.compareAndSet(expectedValue = false, newValue = true)) {
+            retirementCompleted.await()
+            return
+        }
+
+        try {
+            intakeOpen.store(false)
+            processingEnabled.value = true
+            queue.close()
+            processorJob.join()
+            ownedScope.cancel()
+            retirementCompleted.complete(Unit)
+        } catch (error: Throwable) {
+            retirementCompleted.completeExceptionally(error)
+            throw error
         }
     }
 
@@ -156,19 +208,29 @@ abstract class Scribe {
         margins?.footer(scroll)
     }
 
-    private fun requireActiveQueue(): Channel<Entry> {
-        return activeQueue ?: throw IllegalStateException("This Scribe runtime is not active. Call hire(...) first.")
+    internal fun enqueue(entry: Entry): Boolean {
+        if (!isIntakeOpen) return false
+        return queue.trySend(entry).isSuccess
     }
 
-    fun enqueue(entry: Entry) {
-        requireActiveQueue().trySendBlocking(entry)
-    }
-
-    private fun <E> Channel<E>.trySendBlocking(element: E) {
-        val result = trySend(element)
-        if (result.isSuccess) return
-        runBlocking {
-            runCatching { send(element) }
+    private suspend fun archive(
+        configuredArchivists: List<Archivist>,
+        entry: Entry,
+    ) = coroutineScope {
+        configuredArchivists.forEach { archivist ->
+            launch {
+                try {
+                    archivist.write(entry)
+                } catch (_: CancellationException) {
+                    currentCoroutineContext().ensureActive()
+                } catch (e: Throwable) {
+                    try {
+                        onArchiveFailure?.invoke(archivist, entry, e)
+                    } catch (_: Throwable) {
+                        // Ignore callback failures to keep delivery alive.
+                    }
+                }
+            }
         }
     }
 }

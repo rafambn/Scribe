@@ -14,7 +14,6 @@ import kotlinx.coroutines.withTimeout
 import kotlinx.serialization.json.jsonPrimitive
 import kotlin.test.Test
 import kotlin.test.assertEquals
-import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 import kotlin.time.Duration.Companion.milliseconds
@@ -65,6 +64,33 @@ class ScribeDeliveryRetireTest {
     }
 
     @Test
+    fun archivists_process_the_same_entry_in_parallel() {
+        runSuspend {
+            val release = CompletableDeferred<Unit>()
+            val firstStarted = CompletableDeferred<Unit>()
+            val secondStarted = CompletableDeferred<Unit>()
+            val first = Archivist {
+                firstStarted.complete(Unit)
+                release.await()
+            }
+            val second = Archivist {
+                secondStarted.complete(Unit)
+                release.await()
+            }
+            val scribe = scribeWithArchivists(listOf(first, second))
+
+            scribe.newScroll(id = "parallel").seal(scribe)
+            withTimeout(2_000.milliseconds) {
+                firstStarted.await()
+                secondStarted.await()
+            }
+
+            release.complete(Unit)
+            scribe.retire()
+        }
+    }
+
+    @Test
     fun scroll_events_reach_all_configured_archivists() {
         runSuspend {
             val scrollShelf = RecordingShelf()
@@ -94,7 +120,8 @@ class ScribeDeliveryRetireTest {
             val shelf = BlockingShelf(gate)
             val scribe = scribeWithScrollShelves(
                 shelf,
-                channel = Channel(capacity = 4, onBufferOverflow = BufferOverflow.DROP_OLDEST),
+                bufferCapacity = 4,
+                bufferOverflow = BufferOverflow.DROP_OLDEST,
             )
 
             scribe.newScroll(id = "slow").seal(scribe)
@@ -143,7 +170,7 @@ class ScribeDeliveryRetireTest {
     }
 
     @Test
-    fun retire_waits_for_inflight_delivery() {
+    fun dismiss_returns_while_inflight_delivery_finishes_cooperatively() {
         runSuspend {
             val gate = CompletableDeferred<Unit>()
             val firstWriteStarted = CompletableDeferred<Unit>()
@@ -152,26 +179,33 @@ class ScribeDeliveryRetireTest {
 
             scribe.newScroll(id = "in-flight").seal(scribe)
             firstWriteStarted.await()
-            val retireScope = CoroutineScope(Dispatchers.Default)
-            val retireJob = retireScope.launch { scribe.retire() }
-            delay(50.milliseconds)
-            assertFalse(retireJob.isCompleted)
+            scribe.dismiss()
+            assertFalse(scribe.isProcessing)
+            assertTrue(shelf.events.isEmpty())
+
             gate.complete(Unit)
-            withTimeout(2_000.milliseconds) { retireJob.join() }
-            retireScope.cancel()
+            shelf.awaitEvents(1)
             assertEquals("in-flight", shelf.events.single()["scroll_id"]?.jsonPrimitive?.content)
+            scribe.retire()
         }
     }
 
     @Test
-    fun seal_throws_after_retire() {
+    fun dismiss_keeps_intake_open_and_rehire_processes_buffered_entries() {
         runSuspend {
-            val scribe = scribeWithScrollShelves(RecordingShelf())
+            val shelf = RecordingShelf()
+            val scribe = scribeWithScrollShelves(shelf)
 
+            scribe.dismiss()
+            assertFalse(scribe.isProcessing)
+            scribe.newScroll(id = "after").seal(scribe)
+            delay(50.milliseconds)
+            assertTrue(shelf.events.isEmpty())
+
+            scribe.hire()
+            shelf.awaitEvents(1)
+            assertEquals("after", shelf.events.single()["scroll_id"]?.jsonPrimitive?.content)
             scribe.retire()
-            assertFailsWith<IllegalStateException> {
-                scribe.newScroll(id = "after").seal(scribe)
-            }
         }
     }
 
@@ -200,12 +234,12 @@ class ScribeDeliveryRetireTest {
     }
 
     @Test
-    fun retire_called_from_archivist_does_not_deadlock() {
+    fun dismiss_called_from_archivist_does_not_deadlock() {
         runSuspend {
             val retired = CompletableDeferred<Unit>()
             lateinit var scribe: Scribe
             val archivist = Archivist {
-                scribe.retire()
+                scribe.dismiss()
                 retired.complete(Unit)
             }
             scribe = scribeWithArchivists(shelves = listOf(archivist))
@@ -216,14 +250,14 @@ class ScribeDeliveryRetireTest {
     }
 
     @Test
-    fun retire_called_from_archivist_child_coroutine_does_not_deadlock() {
+    fun dismiss_called_from_archivist_child_coroutine_does_not_deadlock() {
         runSuspend {
             val retired = CompletableDeferred<Unit>()
             lateinit var scribe: Scribe
             val archivist = Archivist {
                 coroutineScope {
                     launch {
-                        scribe.retire()
+                        scribe.dismiss()
                         retired.complete(Unit)
                     }
                 }
@@ -240,6 +274,7 @@ class ScribeDeliveryRetireTest {
         runSuspend {
             val events = mutableListOf<Entry>()
             val errors = mutableListOf<Throwable>()
+            val failureReported = CompletableDeferred<Unit>()
             val failingArchivist = Archivist { throw IllegalStateException("boom") }
             val recordingArchivist = RecordingShelf()
             val scribe = scribeWithArchivists(
@@ -247,11 +282,13 @@ class ScribeDeliveryRetireTest {
                 onArchivist = { _, entry, error ->
                     events += entry
                     errors += error
+                    failureReported.complete(Unit)
                 },
             )
 
             scribe.newScroll(id = "error-1").seal(scribe)
             recordingArchivist.awaitEvents(1)
+            failureReported.await()
             scribe.retire()
 
             assertEquals(1, recordingArchivist.events.size)
@@ -291,7 +328,8 @@ class ScribeDeliveryRetireTest {
             val cancelingArchivist = Archivist { throw CancellationException("cancel-delivery") }
             val scribe = scribeWithArchivists(
                 shelves = listOf(cancelingArchivist),
-                channel = Channel(capacity = 16),
+                bufferCapacity = 16,
+                bufferOverflow = BufferOverflow.SUSPEND,
                 onArchivist = { _, _, error ->
                     reportedErrors += error
                 },

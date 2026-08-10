@@ -1,6 +1,7 @@
 package com.rafambn.scribe
 
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
@@ -14,7 +15,11 @@ class ScribeConcurrencyAndScrollTest {
     fun scroll_seal_supports_high_throughput_concurrent_writes() {
         runSuspend {
             val shelf = RecordingShelf()
-            val scribe = scribeWithScrollShelves(shelf, channel = Channel(Channel.UNLIMITED))
+            val scribe = scribeWithScrollShelves(
+                shelf,
+                bufferCapacity = Channel.UNLIMITED,
+                bufferOverflow = BufferOverflow.SUSPEND,
+            )
 
             coroutineScope {
                 repeat(1_000) { index ->

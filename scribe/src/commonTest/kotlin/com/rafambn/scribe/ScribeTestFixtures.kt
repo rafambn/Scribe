@@ -14,19 +14,26 @@ internal val UUID_REGEX =
 internal fun scribeWithScrollShelves(
     vararg shelves: Archivist,
     imprint: Map<String, JsonElement> = emptyMap(),
-    channel: Channel<Entry> = Channel(capacity = 256, onBufferOverflow = BufferOverflow.DROP_OLDEST),
+    bufferCapacity: Int = 256,
+    bufferOverflow: BufferOverflow = BufferOverflow.DROP_OLDEST,
     onArchivist: (archivist: Archivist, entry: Entry, error: Throwable) -> Unit = { _, _, _ -> },
     margins: Margin? = null,
+    startProcessing: Boolean = true,
 ): Scribe {
     val configuredShelves = shelves.toList()
     val configuredImprint = imprint
     val configuredMargins = margins
+    val configuredBufferCapacity = bufferCapacity
+    val configuredBufferOverflow = bufferOverflow
     return object : Scribe() {
         override val archivists: List<Archivist> = configuredShelves
+        override val bufferCapacity: Int = configuredBufferCapacity
+        override val bufferOverflow: BufferOverflow = configuredBufferOverflow
+        override val onArchiveFailure = onArchivist
         override val imprint: Map<String, JsonElement> = configuredImprint
         override val margins: Margin? = configuredMargins
     }.also {
-        it.hire(channel = channel, onArchiveFailure = onArchivist)
+        if (startProcessing) it.hire()
     }
 }
 
@@ -34,18 +41,25 @@ internal fun scribeWithArchivists(
     shelves: List<Archivist>,
     imprint: Map<String, JsonElement> = emptyMap(),
     margins: Margin? = null,
-    channel: Channel<Entry> = Channel(capacity = 256, onBufferOverflow = BufferOverflow.DROP_OLDEST),
+    bufferCapacity: Int = 256,
+    bufferOverflow: BufferOverflow = BufferOverflow.DROP_OLDEST,
     onArchivist: (archivist: Archivist, entry: Entry, error: Throwable) -> Unit = { _, _, _ -> },
+    startProcessing: Boolean = true,
 ): Scribe {
     val configuredShelves = shelves
     val configuredImprint = imprint
     val configuredMargins = margins
+    val configuredBufferCapacity = bufferCapacity
+    val configuredBufferOverflow = bufferOverflow
     return object : Scribe() {
         override val archivists: List<Archivist> = configuredShelves
+        override val bufferCapacity: Int = configuredBufferCapacity
+        override val bufferOverflow: BufferOverflow = configuredBufferOverflow
+        override val onArchiveFailure = onArchivist
         override val imprint: Map<String, JsonElement> = configuredImprint
         override val margins: Margin? = configuredMargins
     }.also {
-        it.hire(channel = channel, onArchiveFailure = onArchivist)
+        if (startProcessing) it.hire()
     }
 }
 
