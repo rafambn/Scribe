@@ -14,8 +14,6 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.channels.BufferOverflow
-import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.json.Json
@@ -52,18 +50,17 @@ class HomeViewModel {
     private val _state = MutableStateFlow(HomeState())
     val state: StateFlow<HomeState> = _state.asStateFlow()
 
-    private val appScribe = AppScribe { entry -> handleRecord(entry) }
+    private val appScribe = AppScribe(
+        onRecord = { entry -> handleRecord(entry) },
+        onArchiveFailure = { archivist, entry, error ->
+            appendArchivistError(
+                "Archivist failure in ${archivist::class.simpleName ?: "Archivist"} for ${entryKind()}: ${error.message ?: error}",
+            )
+        },
+    )
 
     init {
-        appScribe.hire(
-            scope = scope,
-            channel = Channel(capacity = 2, onBufferOverflow = BufferOverflow.DROP_OLDEST),
-            onArchiveFailure = { archivist, entry, error ->
-                appendArchivistError(
-                    "Archivist failure in ${archivist::class.simpleName ?: "Archivist"} for ${entryKind()}: ${error.message ?: error}",
-                )
-            },
-        )
+        appScribe.hire()
     }
 
     fun runQuickScrollScenario() = launchScenario("Quick scroll emission demo") {
@@ -226,11 +223,11 @@ class HomeViewModel {
         val delivered = printedEvents - baseline
         appendTimeline(
             title = "Overflow result",
-            detail = "Attempted $attempted quick scrolls with channel capacity 2 and DROP_OLDEST; delivered $delivered.",
+            detail = "Attempted $attempted quick scrolls with private buffer capacity 2 and DROP_OLDEST; delivered $delivered.",
             payload = "",
             success = delivered < attempted,
         )
-        updateStatus("Ran overflow demo with Channel(..., onBufferOverflow = DROP_OLDEST).")
+        updateStatus("Ran overflow demo with the private buffer configured as DROP_OLDEST.")
     }
 
     fun runArchivistFailureScenario() = launchScenario("Archivist error demo") {
@@ -239,45 +236,45 @@ class HomeViewModel {
             message = "Intentional archivist failure probe",
             level = "WARN",
         )
-        updateStatus("Archivist failure demo ran; onArchivist callback captures the injected failure.")
+        updateStatus("Archivist failure demo ran; onArchiveFailure captures the injected failure.")
     }
 
-    fun runRetireScenario() = launchScenario("retire() demo") {
-        emitQuickScroll("shutdown", "retire() with light queue", "INFO")
+    fun runRetireScenario() = launchScenario("dismiss() demo") {
+        emitQuickScroll("lifecycle", "dismiss() with light queue", "INFO")
         val started = currentEpochMillis()
-        appScribe.retire()
+        appScribe.dismiss()
         val elapsed = currentEpochMillis() - started
 
         activeScrolls.clear()
         _state.update { it.copy(isRetired = true) }
         refreshActiveScrolls()
         appendTimeline(
-            title = "retire()",
-            detail = "retire() finished in ${elapsed}ms and retired the shared demo Scribe instance.",
+            title = "dismiss()",
+            detail = "dismiss() finished in ${elapsed}ms and paused the job without closing intake.",
             payload = "",
             success = true,
         )
-        updateStatus("The shared demo Scribe is retired. Press Re-hire Scribe before sending more messages.")
+        updateStatus("Processing is paused; new messages remain buffered until Re-hire Scribe is pressed.")
     }
 
-    fun runPlanRetireScenario() = launchScenario("retire() with backlog demo") {
+    fun runPlanRetireScenario() = launchScenario("dismiss() with backlog demo") {
         repeat(6) { index ->
-            emitQuickScroll("shutdown", "drain probe #$index", "INFO")
+            emitQuickScroll("lifecycle", "buffered probe #$index", "INFO")
         }
         val started = currentEpochMillis()
-        appScribe.retire()
+        appScribe.dismiss()
         val elapsed = currentEpochMillis() - started
 
         activeScrolls.clear()
         _state.update { it.copy(isRetired = true) }
         refreshActiveScrolls()
         appendTimeline(
-            title = "retire() with backlog",
-            detail = "retire() took ${elapsed}ms after a small queued backlog.",
+            title = "dismiss() with backlog",
+            detail = "dismiss() took ${elapsed}ms and preserved the queued backlog.",
             payload = "",
             success = true,
         )
-        updateStatus("The shared demo Scribe is retired after draining queued work. Press Re-hire Scribe to continue.")
+        updateStatus("Processing is paused and queued work is preserved. Press Re-hire Scribe to drain it.")
     }
 
     fun wireIgnitionScenario() = launchScenario("onIgnition wiring") {
@@ -306,15 +303,7 @@ class HomeViewModel {
             return@launchScenario
         }
 
-        appScribe.hire(
-            channel = Channel(capacity = 2, onBufferOverflow = BufferOverflow.DROP_OLDEST),
-            scope = scope,
-            onArchiveFailure = { archivist, entry, error ->
-                appendArchivistError(
-                    "Archivist failure in ${archivist::class.simpleName ?: "Archivist"} for ${entryKind()}: ${error.message ?: error}",
-                )
-            },
-        )
+        appScribe.hire()
         _state.update { it.copy(isRetired = false) }
         refreshActiveScrolls()
         updateStatus("The shared demo Scribe was re-hired and can send messages again.")

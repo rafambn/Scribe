@@ -15,7 +15,10 @@ Scribe models logging with structured scroll events:
 - `extend(scroll)`: copies missing keys from another scroll into this one
 - `append(key, scroll)`: nests a scroll as a JSON object under the given key
 - `Margin`: hook for writing fields at open/close boundaries
-- `hire(channel = ..., scope = ..., onArchivist = ...)`: starts delivery over your channel configuration
+- `hire()`: starts or resumes processing of the private buffer
+- `openIntake()` / `closeIntake()`: independently control whether new entries are accepted
+- `dismiss()`: requests a cooperative job pause while preserving buffered entries
+- `retire()`: permanently closes intake and drains the buffer
 
 ## `Scribe`
 
@@ -32,15 +35,19 @@ Define runtime configuration with overridden properties:
 
 ```kotlin
 object CheckoutScribe : Scribe() {
-    override val shelves: List<Archivist> = listOf(Archivist { entry -> println(entry) })
+    override val bufferCapacity = 256
+    override val bufferOverflow = BufferOverflow.DROP_OLDEST
+    override val onArchiveFailure: ((Archivist, Entry, Throwable) -> Unit)? = null
+    override val archivists: List<Archivist> = listOf(Archivist { entry -> println(entry) })
     override val imprint = mapOf("service" to JsonPrimitive("checkout"))
     override val margins = timingMargin
 }
 ```
 
-Delivery is started with `CheckoutScribe.hire(...)` and stopped with
-`CheckoutScribe.retire()`. Different objects can run concurrently without
-sharing queues, savers, or lifecycle.
+Intake starts open and the job starts dismissed. Delivery is started with
+`CheckoutScribe.hire()`, paused with `CheckoutScribe.dismiss()`, and permanently
+ended with `CheckoutScribe.retire()`. Different objects have independent private
+buffers, archivists, and lifecycle controls.
 
 ## `Scroll`
 
@@ -127,31 +134,23 @@ val margin = object : Margin {
 
 ## Delivery Configuration
 
-Configure queue behavior through the `Channel<Entry>` passed to an instance's
-`hire(...)`.
+Configure private-buffer behavior when creating the `Scribe`.
 
 ```kotlin
-CheckoutScribe.hire(
-    channel = Channel(
-        capacity = 256,
-        onBufferOverflow = BufferOverflow.DROP_OLDEST,
-    ),
-    onArchivist = { archivist, entry, error ->
+object CheckoutScribe : Scribe() {
+    override val bufferCapacity = 256
+    override val bufferOverflow = BufferOverflow.DROP_OLDEST
+    override val onArchiveFailure = { archivist: Archivist, entry: Entry, error: Throwable ->
         println("Archivist $archivist failed for $entry: $error")
-    },
-)
+    }
+    override val archivists = listOf(Archivist { entry -> println(entry) })
+}
+
+CheckoutScribe.hire()
 ```
 
-You can optionally provide a custom `CoroutineScope` to control the lifecycle of the delivery coroutine:
-
-```kotlin
-val customScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
-
-CheckoutScribe.hire(
-    scope = customScope,
-    channel = Channel(capacity = 256),
-)
-```
+The delivery coroutine is owned by the `Scribe` instance so it can remain alive while processing
+is paused and resume on a later `hire()`.
 
 ## Event Shapes
 
@@ -170,21 +169,21 @@ mapOf(
 
 ```kotlin
 object ApplicationScribe : Scribe() {
-    override val shelves: List<Archivist> = listOf(Archivist { entry -> println(entry) })
+    override val bufferCapacity = 256
+    override val bufferOverflow = BufferOverflow.DROP_OLDEST
+    override val onArchiveFailure = { archivist: Archivist, entry: Entry, error: Throwable ->
+        println("Archivist $archivist failed for $entry: ${error.message}")
+    }
+    override val archivists: List<Archivist> = listOf(Archivist { entry -> println(entry) })
     override val onIgnition: ((Throwable) -> Unit)? = { throwable ->
         println("Uncaught exception: ${throwable.message}")
     }
 }
 
-ApplicationScribe.hire(
-    channel = Channel(capacity = 256),
-    onArchivist = { archivist, entry, error ->
-        println("Archivist $archivist failed for $entry: ${error.message}")
-    },
-)
+ApplicationScribe.hire()
 ```
 
-`onIgnition` is read when that runtime is first hired, but handles uncaught
+`onIgnition` is read when processing is first hired, but handles uncaught
 exceptions at the platform level. Multiple runtimes should not independently
 claim this application-global hook. Archivist failures are reported by the
-`onArchivist` callback passed to `hire(...)`.
+`onArchiveFailure` property defined by the implementation.

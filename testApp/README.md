@@ -15,8 +15,8 @@ No server or local observability stack is required.
 - `Margin.header(...)` and `Margin.footer(...)`
 - `Archivist` fanned out across multiple outputs
 - Channel overflow behavior through `DROP_OLDEST`
-- Archivist failure reporting through `hire(onArchivist = ...)`
-- `retire()` and runtime re-hire
+- Archivist failure reporting through the implementation's `onArchiveFailure` property
+- reversible job pause through `dismiss()` and `hire()`
 - `onIgnition` wiring without intentionally crashing the app
 
 ## Run The App
@@ -29,7 +29,7 @@ From the repository root:
 ```
 
 The UI contains demo actions for quick scrolls, wide events, JSON serialization, queue
-delivery, archivist failures, and runtime shutdown. Each delivered `Entry` is
+delivery, archivist failures, and runtime retirement. Each delivered `Entry` is
 rendered as JSON and printed to stdout, while the most recent records remain
 visible in the in-app timeline.
 

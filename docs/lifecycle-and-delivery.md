@@ -1,123 +1,78 @@
 # Lifecycle and Delivery
 
-## Delivery Pipeline
+## Private Buffer
 
-A `Scribe` object delivers `Entry` snapshots through the `Channel<Entry>` provided to
-`hire(...)`. The channel is disposable and transfers ownership to that object,
-which closes it on processor completion or `retire()`. Different `Scribe`
-objects may be hired concurrently with independent channels.
-
-You can optionally provide a custom `CoroutineScope` to control the delivery coroutine lifecycle:
-
-```kotlin
-val customScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
-
-CheckoutScribe.hire(
-    scope = customScope,
-    channel = Channel(capacity = 256),
-)
-```
+Each `Scribe` owns its delivery buffer. Callers configure its capacity and overflow policy,
+but never own or close the underlying `Channel`:
 
 ```kotlin
 object CheckoutScribe : Scribe() {
-    override val shelves: List<Archivist> = listOf(Archivist { entry ->
-        println(entry)
-    })
+    override val bufferCapacity = 256
+    override val bufferOverflow = BufferOverflow.DROP_OLDEST
+    override val onArchiveFailure: ((Archivist, Entry, Throwable) -> Unit)? = null
+    override val archivists = listOf(Archivist { entry -> println(entry) })
 }
-
-CheckoutScribe.hire(
-    channel = Channel(
-        capacity = 256,
-        onBufferOverflow = BufferOverflow.DROP_OLDEST,
-    ),
-    onArchivist = { archivist, entry, error ->
-        println("Archivist $archivist failed for $entry: ${error.message}")
-    },
-)
 ```
 
-## Emission APIs
+Intake starts open and the job starts dismissed. Entries sealed before `hire()` remain in the
+buffer according to the configured overflow policy.
 
-Current emission calls are non-suspending and always produce scroll events:
+## Independent Controls
 
-- `seal(scribe, ...)` applies that runtime's footer margin, snapshots the
-  current `Scroll` data, and sends the resulting `Entry`
+Intake and the processing job are independent:
 
-Calls attempt an immediate channel send and block the calling thread if a
-channel configured with `BufferOverflow.SUSPEND` is full. `Archivist.write(...)`
-and `retire()` are the suspending parts of the API. There are no separate
-best-effort emission APIs in this runtime shape.
-
-Multiple calls to `seal(...)` on the same `Scroll` are intentional. Each call
-emits a separate `Entry` through the `Scribe` passed to that call.
-
-## Shared Context with `imprint`
-
-`imprint` adds fields to every new `Scroll` created by the same `Scribe` object.
+| Intake | Job | Behavior |
+|---|---|---|
+| open | dismissed | new entries accumulate in the buffer |
+| open | hired | new and buffered entries are delivered |
+| closed | hired | no new entries are accepted; the backlog keeps draining |
+| closed | dismissed | no intake or delivery occurs; the backlog is preserved |
 
 ```kotlin
-object CheckoutScribe : Scribe() {
-    override val shelves: List<Archivist> = listOf(Archivist { println(it) })
-    override val imprint = mapOf(
-        "app" to JsonPrimitive("checkout"),
-        "region" to JsonPrimitive("us-east-1"),
-    )
-}
-
-CheckoutScribe.hire(channel = Channel(capacity = 256))
+CheckoutScribe.hire()         // start or resume the job
+CheckoutScribe.dismiss()      // request a cooperative pause immediately
+CheckoutScribe.closeIntake()
+CheckoutScribe.openIntake()
 ```
 
-These values are inserted into the scroll map and then appear in the delivered `Entry`.
+Archivist failure handling is configured by the implementation's `onArchiveFailure` property.
+Calling `hire()`
+while processing is active has no effect. `dismiss()` is reversible, returns immediately, and does
+not close intake. An entry already received by the worker may finish or remain held at the pause
+gate; all other entries stay in the private buffer until the next `hire()`.
 
-## Open and Close Hooks with `Margin`
+Archivists process each entry concurrently. The processor waits for every archivist to finish
+before consuming the next entry, preserving entry order for each archivist while preventing one
+archivist from delaying the start of its peers.
 
-Use `Margin` when scrolls need standard fields at creation and sealing time.
+## Emission
 
-```kotlin
-val timingMargin = object : Margin {
-    override fun header(scroll: Scroll) {
-        scroll["started_at"] = JsonPrimitive(1000)
-    }
+`seal(scribe)` applies the footer margin, snapshots the current `Scroll`, and attempts to place the
+resulting `Entry` in the private buffer. It is non-suspending and never blocks waiting for buffer
+space. Entries rejected because intake is closed, the buffer is full with `SUSPEND`, or retirement
+has begun are not delivered. Prefer `DROP_OLDEST` or `DROP_LATEST` for synchronous logging.
 
-    override fun footer(scroll: Scroll) {
-        scroll["sealed_at"] = JsonPrimitive(2000)
-    }
-}
+Multiple calls to `seal(...)` on the same `Scroll` intentionally create separate snapshots.
 
-object CheckoutScribe : Scribe() {
-    override val shelves: List<Archivist> = listOf(Archivist { println(it) })
-    override val margins = timingMargin
-}
+## Terminal Retirement
 
-CheckoutScribe.hire(channel = Channel(capacity = 256))
-```
-
-## Graceful Shutdown
-
-Use `retire()` to stop intake and wait until queued delivery work is finished.
+`retire()` is distinct from the reversible `dismiss()`:
 
 ```kotlin
 CheckoutScribe.retire()
 ```
 
-After `retire()`, that object's previous channel is closed and cannot be
-reused. Call `hire(...)` with a new channel to restart its delivery. Other
-active `Scribe` objects are unaffected.
+It closes intake and the private buffer, finishes the active archivist call, drains all accepted
+entries, and releases the internally owned scope. Intake and processing cannot restart
+afterward.
+
+The JVM SLF4J provider registers a shutdown hook that calls `retire()` automatically. It does not
+call `hire()`: the application chooses when processing begins, while earlier SLF4J calls accumulate
+in the backend's private buffer.
 
 ## Uncaught Exceptions
 
-Override `onIgnition` on an application-owned `Scribe` object to install the
-platform uncaught exception hook when that object is first hired:
-
-```kotlin
-object ApplicationScribe : Scribe() {
-    override val shelves: List<Archivist> = listOf(Archivist { println(it) })
-    override val onIgnition: ((Throwable) -> Unit)? = { throwable ->
-        println("Uncaught exception: ${throwable.message}")
-    }
-}
-```
-
-This hook is platform-global even though the property is declared by one
-runtime object. Archivist-level failures are handled separately by `onArchivist` passed
-to `hire(...)`.
+Override `onIgnition` on an application-owned `Scribe` to install the platform uncaught exception
+hook when processing is first hired. The hook is platform-global even though it is configured on
+one instance. Archivist failures are handled separately by the implementation's
+`onArchiveFailure` property.

@@ -6,6 +6,7 @@ import com.rafambn.scribe.Scribe
 import com.rafambn.scribe.Scroll
 import com.rafambn.scribe.Entry
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.JsonPrimitive
@@ -17,7 +18,13 @@ import scribe.demo.data.sampleImprint
 import scribe.demo.platformName
 import kotlin.time.Duration.Companion.milliseconds
 
-class AppScribe(onRecord: (Entry) -> Unit) : Scribe() {
+class AppScribe(
+    onRecord: (Entry) -> Unit,
+    override val onArchiveFailure: ((Archivist, Entry, Throwable) -> Unit)?,
+) : Scribe() {
+
+    override val bufferCapacity: Int = 2
+    override val bufferOverflow: BufferOverflow = BufferOverflow.DROP_OLDEST
 
     var overflowDelay: Boolean = false
 

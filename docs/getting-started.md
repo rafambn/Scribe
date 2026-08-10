@@ -16,22 +16,19 @@ kotlin {
 
 ## Create a Minimal `Scribe`
 
-Create an object that extends `Scribe`, override its savers, then hire that
-object's runtime with a `Channel<Entry>`.
+Create an object that extends `Scribe`, configure its private buffer, then hire its processor.
 
 ```kotlin
 object AppScribe : Scribe() {
-    override val shelves: List<Archivist> = listOf(Archivist { scroll ->
+    override val bufferCapacity = 256
+    override val bufferOverflow = BufferOverflow.DROP_OLDEST
+    override val onArchiveFailure: ((Archivist, Entry, Throwable) -> Unit)? = null
+    override val archivists: List<Archivist> = listOf(Archivist { scroll ->
         println(scroll)
     })
 }
 
-AppScribe.hire(
-    channel = Channel(
-        capacity = 256,
-        onBufferOverflow = BufferOverflow.DROP_OLDEST,
-    ),
-)
+AppScribe.hire()
 ```
 
 ## Emit a Single Event
@@ -93,18 +90,24 @@ application may supply a configured object to a component.
 
 ```kotlin
 object PaymentsScribe : Scribe() {
-    override val shelves: List<Archivist> = listOf(Archivist { sendPaymentsRecord(it) })
+    override val bufferCapacity = 256
+    override val bufferOverflow = BufferOverflow.DROP_OLDEST
+    override val onArchiveFailure: ((Archivist, Entry, Throwable) -> Unit)? = null
+    override val archivists: List<Archivist> = listOf(Archivist { sendPaymentsRecord(it) })
 }
 
 object AnalyticsScribe : Scribe() {
-    override val shelves: List<Archivist> = listOf(Archivist { sendAnalyticsRecord(it) })
+    override val bufferCapacity = 256
+    override val bufferOverflow = BufferOverflow.DROP_OLDEST
+    override val onArchiveFailure: ((Archivist, Entry, Throwable) -> Unit)? = null
+    override val archivists: List<Archivist> = listOf(Archivist { sendAnalyticsRecord(it) })
 }
 
-PaymentsScribe.hire(channel = Channel(256))
-AnalyticsScribe.hire(channel = Channel(256))
+PaymentsScribe.hire()
+AnalyticsScribe.hire()
 ```
 
-Retiring `PaymentsScribe` does not stop `AnalyticsScribe`.
+Dismissing `PaymentsScribe` pauses only its job and does not stop `AnalyticsScribe`.
 
 The emitted event shape is the scroll map itself:
 
@@ -135,4 +138,4 @@ val scrollArchivist = Archivist { scroll -> println(scroll) }
 ## What to Read Next
 
 - [API Concepts](api-concepts.md) for the core types and terminology
-- [Lifecycle and Delivery](lifecycle-and-delivery.md) for channel behavior, margins, shutdown, and archivist error callbacks
+- [Lifecycle and Delivery](lifecycle-and-delivery.md) for intake, processing, retirement, and archivist error callbacks

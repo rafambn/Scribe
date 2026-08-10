@@ -129,12 +129,12 @@ fun HomeContent(
                     enabled = !isBusy,
                 )
                 ActionGroup(
-                    title = "Shutdown And Safety",
-                    description = "Use retire() shutdown flows and wire the onIgnition callback safely.",
+                    title = "Lifecycle And Safety",
+                    description = "Pause and resume processing, then wire the onIgnition callback safely.",
                     buttons = listOf(
                         "Re-hire Scribe" to onRehireMainScribe,
-                        "retire() (light queue)" to onRunRetireScenario,
-                        "retire() with backlog" to onRunPlanRetireScenario,
+                        "dismiss() (light queue)" to onRunRetireScenario,
+                        "dismiss() preserving backlog" to onRunPlanRetireScenario,
                         "Wire onIgnition" to onWireIgnitionScenario,
                     ),
                     enabled = !isBusy,

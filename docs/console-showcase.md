@@ -16,7 +16,7 @@ application console. There is no external service to configure.
 - `Archivist` fanned out across multiple outputs
 - Channel overflow behavior through `DROP_OLDEST`
 - Archivist error callbacks
-- `retire()` and runtime re-hire
+- reversible job pause through `dismiss()` and `hire()`
 - Safe `onIgnition` wiring
 
 ## Run It
@@ -38,6 +38,6 @@ records are available through their platform run consoles.
 6. Run `Archivist mixed flow` to print two scroll shapes through one archivist.
 7. Run `Overflow demo` and observe that a burst can be trimmed under pressure.
 8. Run `Archivist failure demo` and observe the printed archivist error while delivery continues.
-9. Compare `retire() (light queue)` with `retire() with backlog`.
+9. Compare `dismiss() (light queue)` with `dismiss() with backlog`.
 
 The in-app timeline mirrors delivered console records for convenient inspection.
