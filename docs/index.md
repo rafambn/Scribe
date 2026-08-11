@@ -37,3 +37,4 @@ That pushes logging toward "what happened to this request or workflow?" instead 
 - [Getting Started](getting-started.md) for setup and first usage
 - [API Concepts](api-concepts.md) for terminology and data model
 - [Lifecycle and Delivery](lifecycle-and-delivery.md) for buffering, intake, processing, and retirement
+- [SLF4J Provider](slf4j.md) for routing JVM SLF4J 2.x calls through Scribe

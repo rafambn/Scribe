@@ -5,13 +5,13 @@
 Scribe models logging with structured scroll events:
 
 - `Scroll`: a mutable JSON-map you build up and then pass to `seal(...)`
-- `Entry`: typealias for `Map<String, JsonElement>`, the immutable snapshot produced by sealing a `Scroll` and delivered through a runtime's savers
+- `Entry`: typealias for `Map<String, JsonElement>`, the read-only snapshot produced by sealing a `Scroll` and delivered through a runtime's archivists
 
 ## Terminology
 
 - `newScroll(...)`: starts a contextual logging session
 - `seal(scribe)`: applies the supplied runtime's footer, snapshots the
-  current scroll data, and emits an `Entry`
+  current scroll data, attempts a non-blocking enqueue, and returns the `Entry`
 - `extend(scroll)`: copies missing keys from another scroll into this one
 - `append(key, scroll)`: nests a scroll as a JSON object under the given key
 - `Margin`: hook for writing fields at open/close boundaries
@@ -25,7 +25,8 @@ Scribe models logging with structured scroll events:
 `Scribe` is an abstract runtime base class. A user creates one or more objects
 that extend it. Each object owns:
 
-- one or more savers (`shelves`)
+- zero or more configured archivists (at least one is required when `hire()` is called)
+- a private buffer with a capacity and overflow policy
 - an optional shared `imprint`
 - optional lifecycle hooks through `Margin`
 - optional uncaught exception wiring through `onIgnition` (the installed
@@ -86,9 +87,8 @@ val scroll = CheckoutScribe.newScroll(id = "checkout-42")
 println(scroll.id) // "checkout-42"
 ```
 
-Calling `seal(...)` more than once is allowed. Each call emits a separate
-`Entry` through the `Scribe` passed to that call, with a snapshot of the data
-at that point.
+Calling `seal(...)` more than once is allowed. Each call applies the footer again, creates and
+returns a separate `Entry` snapshot, and attempts delivery through the supplied `Scribe`.
 
 ## `Scroll` Operations
 
@@ -150,7 +150,8 @@ CheckoutScribe.hire()
 ```
 
 The delivery coroutine is owned by the `Scribe` instance so it can remain alive while processing
-is paused and resume on a later `hire()`.
+is paused and resume on a later `hire()`. The configuration properties have defaults; only
+`archivists` normally needs to be overridden for a minimal implementation.
 
 ## Event Shapes
 

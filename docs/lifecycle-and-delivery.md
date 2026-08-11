@@ -52,6 +52,10 @@ resulting `Entry` in the private buffer. It is non-suspending and never blocks w
 space. Entries rejected because intake is closed, the buffer is full with `SUSPEND`, or retirement
 has begun are not delivered. Prefer `DROP_OLDEST` or `DROP_LATEST` for synchronous logging.
 
+`seal(...)` always returns the created snapshot; its return value does not indicate whether the
+buffer accepted it. With `DROP_LATEST`, the channel can report a successful send while discarding
+the new entry according to that overflow policy.
+
 Multiple calls to `seal(...)` on the same `Scroll` intentionally create separate snapshots.
 
 ## Terminal Retirement
@@ -65,6 +69,12 @@ CheckoutScribe.retire()
 It closes intake and the private buffer, finishes the active archivist call, drains all accepted
 entries, and releases the internally owned scope. Intake and processing cannot restart
 afterward.
+
+Concurrent or repeated callers wait for the same retirement operation. Cancelling one waiting
+caller does not cancel the drain, and a later `retire()` call can still await its completion.
+Calling `retire()` from an archivist or one of its child coroutines throws an
+`IllegalStateException` to avoid waiting on the processor from within its own job tree; request
+retirement from the application lifecycle owner instead.
 
 The JVM SLF4J provider registers a shutdown hook that calls `retire()` automatically. It does not
 call `hire()`: the application chooses when processing begins, while earlier SLF4J calls accumulate

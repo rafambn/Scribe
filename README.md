@@ -35,6 +35,7 @@
 - Delivery hooks through `Archivist` instances receiving `Entry` snapshots
 - Scroll lifecycle enrichment through `Margin`
 - Independent `Scribe` objects for applications and imported libraries
+- A JVM SLF4J 2.x provider backed by the same structured logging pipeline
 
 ## Setup
 
@@ -44,7 +45,7 @@ Add Scribe to your `commonMain` dependencies:
 kotlin {
     sourceSets {
         commonMain.dependencies {
-            implementation("com.rafambn:scribe:0.5.0")
+            implementation("com.rafambn:scribe:0.6.0")
         }
     }
 }
@@ -56,12 +57,9 @@ Create a `Scribe` object, start processing its private buffer, and emit a scroll
 
 ```kotlin
 object AppScribe : Scribe() {
-    override val bufferCapacity = 256
-    override val bufferOverflow = BufferOverflow.DROP_OLDEST
-    override val onArchiveFailure: ((Archivist, Entry, Throwable) -> Unit)? = null
     override val archivists: List<Archivist> = listOf(
-        Archivist { scroll ->
-            println(scroll)
+        Archivist { entry ->
+            println(entry)
         }
     )
 }
@@ -78,11 +76,8 @@ Use a scroll when you need shared context for a longer flow:
 
 ```kotlin
 object BillingScribe : Scribe() {
-    override val bufferCapacity = 256
-    override val bufferOverflow = BufferOverflow.DROP_OLDEST
-    override val onArchiveFailure: ((Archivist, Entry, Throwable) -> Unit)? = null
     override val archivists: List<Archivist> = listOf(
-        Archivist { scroll -> println(scroll) }
+        Archivist { entry -> println(entry) }
     )
     override val imprint = mapOf(
         "service" to JsonPrimitive("billing"),
@@ -106,7 +101,7 @@ For JVM applications, add the SLF4J provider:
 
 ```kotlin
 dependencies {
-    implementation("com.rafambn:scribe-slf4j:0.5.0")
+    implementation("com.rafambn:scribe-slf4j:0.6.0")
 }
 ```
 
@@ -134,16 +129,12 @@ The provider discovers the annotated backend once on the first SLF4J access and 
 
 `scribe-slf4j` is a standalone SLF4J provider. Do not include another provider such as `logback-classic` in the same runtime classpath.
 
-Choose the archivist that matches your output flow:
-
-```kotlin
-val scrollArchivist = Archivist { scroll -> println(scroll) }
-```
+See the [full documentation](https://scribe.rafambn.com/) for lifecycle controls, overflow behavior, margins, and SLF4J field mapping.
 
 ## Performance
 
 Scribe is designed for high-throughput and thread-safe concurrent logging.
 
-Benchmark results (measured on JVM):
-- **In-memory ingestion**: ~830,000 logs/sec (Concurrent)
-- **Safe File Writing**: ~130,000 logs/sec (Concurrent, verified no corruption)
+The repository includes JVM throughput tests for concurrent in-memory ingestion and serialized file
+writing. Results depend on the machine, runtime, buffer configuration, and archivist implementation;
+run the tests in your target environment before using them for capacity planning.

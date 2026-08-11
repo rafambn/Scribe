@@ -8,7 +8,7 @@ Use the library from shared code in your Kotlin Multiplatform module:
 kotlin {
     sourceSets {
         commonMain.dependencies {
-            implementation("com.rafambn:scribe:0.5.0")
+            implementation("com.rafambn:scribe:0.6.0")
         }
     }
 }
@@ -20,11 +20,8 @@ Create an object that extends `Scribe`, configure its private buffer, then hire 
 
 ```kotlin
 object AppScribe : Scribe() {
-    override val bufferCapacity = 256
-    override val bufferOverflow = BufferOverflow.DROP_OLDEST
-    override val onArchiveFailure: ((Archivist, Entry, Throwable) -> Unit)? = null
-    override val archivists: List<Archivist> = listOf(Archivist { scroll ->
-        println(scroll)
+    override val archivists: List<Archivist> = listOf(Archivist { entry ->
+        println(entry)
     })
 }
 
@@ -133,9 +130,10 @@ val scrollArchivist = Archivist { scroll -> println(scroll) }
 
 - Every archivist receives `Entry` snapshots
 - `Archivist` is a functional interface: `Archivist { entry -> ... }` is all you need
-- Add multiple savers to a `Scribe` object to fan out to several outputs
+- Add multiple archivists to a `Scribe` object to fan out to several outputs
 
 ## What to Read Next
 
 - [API Concepts](api-concepts.md) for the core types and terminology
 - [Lifecycle and Delivery](lifecycle-and-delivery.md) for intake, processing, retirement, and archivist error callbacks
+- [SLF4J Provider](slf4j.md) for using Scribe as a JVM SLF4J 2.x provider
