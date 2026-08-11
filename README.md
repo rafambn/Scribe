@@ -31,10 +31,11 @@
 ## Features:
 
 - Story-driven logging primitives instead of flat logger calls
-- Single-event logging with `note(...)` and contextual logging with `newScroll(...)`
-- Delivery hooks through `NoteSaver`, `ScrollSaver`, and `EntrySaver`
+- Contextual logging with `newScroll(...)` and immediate-seal one-shot scrolls
+- Delivery hooks through `Archivist` instances receiving `Entry` snapshots
 - Scroll lifecycle enrichment through `Margin`
 - Independent `Scribe` objects for applications and imported libraries
+- A JVM SLF4J 2.x provider backed by the same structured logging pipeline
 
 ## Setup
 
@@ -44,7 +45,7 @@ Add Scribe to your `commonMain` dependencies:
 kotlin {
     sourceSets {
         commonMain.dependencies {
-            implementation("com.rafambn:scribe:0.4.0")
+            implementation("com.rafambn:scribe:0.6.0")
         }
     }
 }
@@ -52,52 +53,88 @@ kotlin {
 
 ## Usage
 
-Create a `Scribe` object, hire its runtime, and emit a note:
+Create a `Scribe` object, start processing its private buffer, and emit a scroll:
 
 ```kotlin
 object AppScribe : Scribe() {
-    override val shelves: List<Saver<*>> = listOf(
-        NoteSaver { note ->
-            println("[${note.level}] ${note.tag}: ${note.message}")
+    override val archivists: List<Archivist> = listOf(
+        Archivist { entry ->
+            println(entry)
         }
     )
 }
-AppScribe.hire(channel = Channel(capacity = 256))
+AppScribe.hire()
 
-AppScribe.note(
-    tag = "payments",
-    message = "starting checkout",
-    level = Urgency.INFO,
-)
+val scroll = AppScribe.newScroll()
+scroll["tag"] = JsonPrimitive("payments")
+scroll["message"] = JsonPrimitive("starting checkout")
+scroll["level"] = JsonPrimitive("INFO")
+scroll.seal(AppScribe)
 ```
 
 Use a scroll when you need shared context for a longer flow:
 
 ```kotlin
 object BillingScribe : Scribe() {
-    override val shelves: List<Saver<*>> = listOf(
-        ScrollSaver { scroll -> println(scroll) }
+    override val archivists: List<Archivist> = listOf(
+        Archivist { entry -> println(entry) }
     )
     override val imprint = mapOf(
         "service" to JsonPrimitive("billing"),
         "environment" to JsonPrimitive("production"),
     )
 }
-BillingScribe.hire(channel = Channel(capacity = 256))
+BillingScribe.hire()
 
 val scroll = BillingScribe.newScroll(id = "checkout-42")
 scroll["gateway"] = JsonPrimitive("stripe")
 scroll["attempt"] = JsonPrimitive(1)
 scroll["retry"] = JsonPrimitive(false)
-scroll.seal(BillingScribe, success = true)
+scroll.seal(BillingScribe)
 ```
 
-Each `Scribe` object has independent configuration and delivery lifecycle. A `Scroll` is a mutable JSON-element map initialized by `newScroll(...)`; pass the runtime that should enrich and deliver it to `scroll.seal(scribe, ...)`. Each `seal(...)` call emits a separate `SealedScroll` snapshot.
+Each `Scribe` object has independent configuration and delivery lifecycle. A `Scroll` is a mutable JSON-element map initialized by `newScroll(...)`; pass the runtime that should enrich and deliver it to `scroll.seal(scribe)`. Each `seal(...)` call emits a separate snapshot of the scroll data.
 
-Choose the saver that matches your output flow:
+## SLF4J
+
+For JVM applications, add the SLF4J provider:
 
 ```kotlin
-val noteSaver = NoteSaver { note -> println(note) }
-val scrollSaver = ScrollSaver { scroll -> println(scroll) }
-val entrySaver = EntrySaver { record -> println(record) }
+dependencies {
+    implementation("com.rafambn:scribe-slf4j:0.6.0")
+}
 ```
+
+Select exactly one application-wide backend with `@ScribeBackend`:
+
+```kotlin
+@ScribeBackend
+object AppScribe : Slf4jScribe() {
+    override val bufferCapacity = 1_024
+    override val bufferOverflow = BufferOverflow.DROP_OLDEST
+    override val onArchiveFailure: ((Archivist, Entry, Throwable) -> Unit)? = null
+    override val archivists = listOf(
+        Archivist { entry -> println(entry) },
+    )
+
+    override fun isEnabled(
+        loggerName: String,
+        level: Level,
+        marker: Marker?,
+    ): Boolean = level.toInt() >= Level.INFO.toInt()
+}
+```
+
+The provider discovers the annotated backend once on the first SLF4J access and registers a JVM shutdown hook. Intake starts open, so early calls accumulate in the private buffer; the application calls `AppScribe.hire()` when processing should begin. The shutdown hook retires the Scribe and drains accepted entries automatically. Initialization fails with a descriptive error when no backend is present, multiple backends are annotated, or the annotation is not placed on a Kotlin object extending `Slf4jScribe`.
+
+`scribe-slf4j` is a standalone SLF4J provider. Do not include another provider such as `logback-classic` in the same runtime classpath.
+
+See the [full documentation](https://scribe.rafambn.com/) for lifecycle controls, overflow behavior, margins, and SLF4J field mapping.
+
+## Performance
+
+Scribe is designed for high-throughput and thread-safe concurrent logging.
+
+The repository includes JVM throughput tests for concurrent in-memory ingestion and serialized file
+writing. Results depend on the machine, runtime, buffer configuration, and archivist implementation;
+run the tests in your target environment before using them for capacity planning.

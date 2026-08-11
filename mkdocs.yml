@@ -28,7 +28,7 @@ nav:
   - Getting Started: getting-started.md
   - API Concepts: api-concepts.md
   - Lifecycle and Delivery: lifecycle-and-delivery.md
-  - Console Showcase: console-showcase.md
+  - SLF4J Provider: slf4j.md
 
 markdown_extensions:
   - admonition

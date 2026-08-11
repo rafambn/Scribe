@@ -3,15 +3,23 @@ package com.rafambn.scribe
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
+import kotlin.uuid.ExperimentalUuidApi
+import kotlin.uuid.Uuid
 
 typealias Scroll = MutableMap<String, JsonElement>
+
+/** Immutable structured log emitted when a [Scroll] is sealed. */
+typealias Entry = Map<String, JsonElement>
 
 val Scroll.id: String
     get() = this["scroll_id"]?.let { (it as? JsonPrimitive)?.content } ?: error("Invalid scroll id metadata.")
 
-fun Scroll.seal(scribe: Scribe, success: Boolean = true): SealedScroll {
+@OptIn(ExperimentalUuidApi::class)
+internal fun newScrollId(): String = Uuid.random().toString()
+
+fun Scroll.seal(scribe: Scribe): Entry {
     scribe.applyFooter(this)
-    val result = SealedScroll(success = success, data = this.toMap())
+    val result: Entry = toMap()
     scribe.enqueue(result)
     return result
 }

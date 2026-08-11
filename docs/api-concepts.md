@@ -2,30 +2,31 @@
 
 ## Core Types
 
-Scribe models logging with two event shapes:
+Scribe models logging with structured scroll events:
 
-- `Note`: a single standalone event
-- `SealedScroll`: a sealed snapshot result of a multi-step `Scroll`
-
-Both implement the sealed `Entry` interface, which is what `EntrySaver` receives.
+- `Scroll`: a mutable JSON-map you build up and then pass to `seal(...)`
+- `Entry`: typealias for `Map<String, JsonElement>`, the read-only snapshot produced by sealing a `Scroll` and delivered through a runtime's archivists
 
 ## Terminology
 
-- `note(...)`: emits a single log entry through the active runtime
 - `newScroll(...)`: starts a contextual logging session
-- `seal(scribe, ...)`: applies the supplied runtime's footer, snapshots the
-  current scroll data, and emits a `SealedScroll`
+- `seal(scribe)`: applies the supplied runtime's footer, snapshots the
+  current scroll data, attempts a non-blocking enqueue, and returns the `Entry`
 - `extend(scroll)`: copies missing keys from another scroll into this one
 - `append(key, scroll)`: nests a scroll as a JSON object under the given key
 - `Margin`: hook for writing fields at open/close boundaries
-- `hire(channel = ..., scope = ..., onSaver = ...)`: starts delivery over your channel configuration
+- `hire()`: starts or resumes processing of the private buffer
+- `openIntake()` / `closeIntake()`: independently control whether new entries are accepted
+- `dismiss()`: requests a cooperative job pause while preserving buffered entries
+- `retire()`: permanently closes intake and drains the buffer
 
 ## `Scribe`
 
 `Scribe` is an abstract runtime base class. A user creates one or more objects
 that extend it. Each object owns:
 
-- one or more savers (`shelves`)
+- zero or more configured archivists (at least one is required when `hire()` is called)
+- a private buffer with a capacity and overflow policy
 - an optional shared `imprint`
 - optional lifecycle hooks through `Margin`
 - optional uncaught exception wiring through `onIgnition` (the installed
@@ -35,15 +36,19 @@ Define runtime configuration with overridden properties:
 
 ```kotlin
 object CheckoutScribe : Scribe() {
-    override val shelves: List<Saver<*>> = listOf(entrySaver)
+    override val bufferCapacity = 256
+    override val bufferOverflow = BufferOverflow.DROP_OLDEST
+    override val onArchiveFailure: ((Archivist, Entry, Throwable) -> Unit)? = null
+    override val archivists: List<Archivist> = listOf(Archivist { entry -> println(entry) })
     override val imprint = mapOf("service" to JsonPrimitive("checkout"))
     override val margins = timingMargin
 }
 ```
 
-Delivery is started with `CheckoutScribe.hire(...)` and stopped with
-`CheckoutScribe.retire()`. Different objects can run concurrently without
-sharing queues, savers, or lifecycle.
+Intake starts open and the job starts dismissed. Delivery is started with
+`CheckoutScribe.hire()`, paused with `CheckoutScribe.dismiss()`, and permanently
+ended with `CheckoutScribe.retire()`. Different objects have independent private
+buffers, archivists, and lifecycle controls.
 
 ## `Scroll`
 
@@ -82,9 +87,8 @@ val scroll = CheckoutScribe.newScroll(id = "checkout-42")
 println(scroll.id) // "checkout-42"
 ```
 
-Calling `seal(...)` more than once is allowed. Each call emits a separate
-`SealedScroll` through the `Scribe` passed to that call, with the current
-`success` value and a snapshot of the data at that point.
+Calling `seal(...)` more than once is allowed. Each call applies the footer again, creates and
+returns a separate `Entry` snapshot, and attempts delivery through the supplied `Scribe`.
 
 ## `Scroll` Operations
 
@@ -117,7 +121,7 @@ checkout.append("cart", meta)
 `Margin` enriches a scroll at beginning and end.
 
 ```kotlin
-val timingMargin = object : Margin {
+val margin = object : Margin {
     override fun header(scroll: Scroll) {
         scroll["started_at"] = JsonPrimitive(1000)
     }
@@ -130,86 +134,57 @@ val timingMargin = object : Margin {
 
 ## Delivery Configuration
 
-Configure queue behavior through the `Channel<Entry>` passed to an instance's
-`hire(...)`.
+Configure private-buffer behavior when creating the `Scribe`.
 
 ```kotlin
-CheckoutScribe.hire(
-    channel = Channel(
-        capacity = 256,
-        onBufferOverflow = BufferOverflow.DROP_OLDEST,
-    ),
-    onSaver = { saver, entry, error ->
-        println("Saver $saver failed for $entry: $error")
-    },
-)
+object CheckoutScribe : Scribe() {
+    override val bufferCapacity = 256
+    override val bufferOverflow = BufferOverflow.DROP_OLDEST
+    override val onArchiveFailure = { archivist: Archivist, entry: Entry, error: Throwable ->
+        println("Archivist $archivist failed for $entry: $error")
+    }
+    override val archivists = listOf(Archivist { entry -> println(entry) })
+}
+
+CheckoutScribe.hire()
 ```
 
-You can optionally provide a custom `CoroutineScope` to control the lifecycle of the delivery coroutine:
-
-```kotlin
-val customScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
-
-CheckoutScribe.hire(
-    scope = customScope,
-    channel = Channel(capacity = 256),
-)
-```
+The delivery coroutine is owned by the `Scribe` instance so it can remain alive while processing
+is paused and resume on a later `hire()`. The configuration properties have defaults; only
+`archivists` normally needs to be overridden for a minimal implementation.
 
 ## Event Shapes
 
+The standard delivered event is a sealed `Scroll` snapshot. Fields written to
+the scroll via normal map operations appear directly in the delivered `Entry`,
+which is a `Map<String, JsonElement>`:
+
 ```kotlin
-Note(
-    tag = "payments",
-    message = "starting checkout",
-    level = Urgency.INFO,
-    timestamp = 1710000000000L,
+mapOf(
+    "scroll_id" to JsonPrimitive("checkout-42"),
+    "gateway" to JsonPrimitive("stripe"),
 )
-```
-
-```kotlin
-SealedScroll(
-    success = true,
-    data = mapOf(
-        "scroll_id" to JsonPrimitive("checkout-42"),
-        "gateway" to JsonPrimitive("stripe"),
-    ),
-)
-```
-
-## Urgency Levels
-
-`Urgency` is used by `Note` to indicate severity:
-
-```kotlin
-enum class Urgency {
-    VERBOSE,
-    DEBUG,
-    INFO,
-    WARN,
-    ERROR
-}
 ```
 
 ## Failure Handling
 
 ```kotlin
 object ApplicationScribe : Scribe() {
-    override val shelves: List<Saver<*>> = listOf(entrySaver)
+    override val bufferCapacity = 256
+    override val bufferOverflow = BufferOverflow.DROP_OLDEST
+    override val onArchiveFailure = { archivist: Archivist, entry: Entry, error: Throwable ->
+        println("Archivist $archivist failed for $entry: ${error.message}")
+    }
+    override val archivists: List<Archivist> = listOf(Archivist { entry -> println(entry) })
     override val onIgnition: ((Throwable) -> Unit)? = { throwable ->
         println("Uncaught exception: ${throwable.message}")
     }
 }
 
-ApplicationScribe.hire(
-    channel = Channel(capacity = 256),
-    onSaver = { saver, entry, error ->
-        println("Saver $saver failed for $entry: ${error.message}")
-    },
-)
+ApplicationScribe.hire()
 ```
 
-`onIgnition` is read when that runtime is first hired, but handles uncaught
+`onIgnition` is read when processing is first hired, but handles uncaught
 exceptions at the platform level. Multiple runtimes should not independently
-claim this application-global hook. Saver failures are reported by the
-`onSaver` callback passed to `hire(...)`.
+claim this application-global hook. Archivist failures are reported by the
+`onArchiveFailure` property defined by the implementation.

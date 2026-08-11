@@ -5,18 +5,19 @@ import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.channels.BufferOverflow
-import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.yield
 import kotlinx.serialization.json.jsonPrimitive
 import kotlin.test.Test
 import kotlin.test.assertEquals
-import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
+import kotlin.time.Duration.Companion.milliseconds
 
 class ScribeDeliveryRetireTest {
     @Test
@@ -41,7 +42,7 @@ class ScribeDeliveryRetireTest {
             assertEquals(2, secondShelf.events.size)
             assertEquals(
                 "second-still-active",
-                secondShelf.events.last().data["scroll_id"]?.jsonPrimitive?.content,
+                secondShelf.events.last()["scroll_id"]?.jsonPrimitive?.content,
             )
         }
     }
@@ -64,24 +65,52 @@ class ScribeDeliveryRetireTest {
     }
 
     @Test
-    fun routes_can_select_notes_scrolls_or_both() {
+    fun archivists_process_the_same_entry_in_parallel() {
+        runSuspend {
+            val release = CompletableDeferred<Unit>()
+            val firstStarted = CompletableDeferred<Unit>()
+            val secondStarted = CompletableDeferred<Unit>()
+            val first = Archivist {
+                firstStarted.complete(Unit)
+                release.await()
+            }
+            val second = Archivist {
+                secondStarted.complete(Unit)
+                release.await()
+            }
+            val scribe = scribeWithArchivists(listOf(first, second))
+
+            scribe.newScroll(id = "parallel").seal(scribe)
+            withTimeout(2_000.milliseconds) {
+                firstStarted.await()
+                secondStarted.await()
+            }
+
+            release.complete(Unit)
+            scribe.retire()
+        }
+    }
+
+    @Test
+    fun scroll_events_reach_all_configured_archivists() {
         runSuspend {
             val scrollShelf = RecordingShelf()
-            val noteSaver = RecordingNoteSaver()
-            val allSaver = RecordingEntrySaver()
-            val scribe = scribeWithSavers(
-                shelves = listOf(scrollShelf, noteSaver, allSaver),
+            val secondSearcher = RecordingShelf()
+            val scribe = scribeWithArchivists(
+                shelves = listOf(scrollShelf, secondSearcher),
             )
 
-            scribe.note(tag = "payments", message = "started", level = Urgency.INFO, timestamp = 100L)
             scribe.newScroll(id = "scroll-1").seal(scribe)
             scrollShelf.awaitEvents(1)
-            noteSaver.awaitEvents(1)
-            allSaver.awaitEvents(2)
+            secondSearcher.awaitEvents(1)
             scribe.retire()
 
-            assertTrue(allSaver.events.any { it is Note })
-            assertTrue(allSaver.events.any { it is SealedScroll })
+            assertEquals(1, scrollShelf.events.size)
+            assertEquals(
+                "scroll-1",
+                scrollShelf.events.single()["scroll_id"]?.jsonPrimitive?.content,
+            )
+            assertEquals("scroll-1", secondSearcher.events.single()["scroll_id"]?.jsonPrimitive?.content)
         }
     }
 
@@ -92,7 +121,8 @@ class ScribeDeliveryRetireTest {
             val shelf = BlockingShelf(gate)
             val scribe = scribeWithScrollShelves(
                 shelf,
-                channel = Channel(capacity = 4, onBufferOverflow = BufferOverflow.DROP_OLDEST),
+                bufferCapacity = 4,
+                bufferOverflow = BufferOverflow.DROP_OLDEST,
             )
 
             scribe.newScroll(id = "slow").seal(scribe)
@@ -112,7 +142,7 @@ class ScribeDeliveryRetireTest {
             val scribe = scribeWithScrollShelves(shelf)
 
             scribe.newScroll(id = "first").seal(scribe)
-            delay(500)
+            delay(500.milliseconds)
             scribe.newScroll(id = "second").seal(scribe)
             shelf.awaitEvents(2)
             scribe.retire()
@@ -136,12 +166,12 @@ class ScribeDeliveryRetireTest {
             shelf.awaitEvents(1)
             scribe.retire()
 
-            assertEquals("scoped", shelf.events.single().data["scroll_id"]?.jsonPrimitive?.content)
+            assertEquals("scoped", shelf.events.single()["scroll_id"]?.jsonPrimitive?.content)
         }
     }
 
     @Test
-    fun retire_waits_for_inflight_delivery() {
+    fun dismiss_returns_while_inflight_delivery_finishes_cooperatively() {
         runSuspend {
             val gate = CompletableDeferred<Unit>()
             val firstWriteStarted = CompletableDeferred<Unit>()
@@ -150,26 +180,33 @@ class ScribeDeliveryRetireTest {
 
             scribe.newScroll(id = "in-flight").seal(scribe)
             firstWriteStarted.await()
-            val retireScope = CoroutineScope(Dispatchers.Default)
-            val retireJob = retireScope.launch { scribe.retire() }
-            delay(50)
-            assertFalse(retireJob.isCompleted)
+            scribe.dismiss()
+            assertFalse(scribe.isProcessing)
+            assertTrue(shelf.events.isEmpty())
+
             gate.complete(Unit)
-            withTimeout(2_000) { retireJob.join() }
-            retireScope.cancel()
-            assertEquals("in-flight", shelf.events.single().data["scroll_id"]?.jsonPrimitive?.content)
+            shelf.awaitEvents(1)
+            assertEquals("in-flight", shelf.events.single()["scroll_id"]?.jsonPrimitive?.content)
+            scribe.retire()
         }
     }
 
     @Test
-    fun note_throws_after_retire() {
+    fun dismiss_keeps_intake_open_and_rehire_processes_buffered_entries() {
         runSuspend {
-            val scribe = scribeWithScrollShelves(RecordingShelf())
+            val shelf = RecordingShelf()
+            val scribe = scribeWithScrollShelves(shelf)
 
+            scribe.dismiss()
+            assertFalse(scribe.isProcessing)
+            scribe.newScroll(id = "after").seal(scribe)
+            delay(50.milliseconds)
+            assertTrue(shelf.events.isEmpty())
+
+            scribe.hire()
+            shelf.awaitEvents(1)
+            assertEquals("after", shelf.events.single()["scroll_id"]?.jsonPrimitive?.content)
             scribe.retire()
-            assertFailsWith<IllegalStateException> {
-                scribe.note(tag = "payments", message = "started", level = Urgency.INFO, timestamp = 123L)
-            }
         }
     }
 
@@ -186,116 +223,151 @@ class ScribeDeliveryRetireTest {
 
             val retireScope = CoroutineScope(Dispatchers.Default)
             val retireJob = retireScope.launch { scribe.retire() }
-            delay(50)
+            delay(50.milliseconds)
             assertFalse(retireJob.isCompleted)
 
             gate.complete(Unit)
-            withTimeout(2_000) { retireJob.join() }
+            withTimeout(2_000.milliseconds) { retireJob.join() }
             retireScope.cancel()
 
-            assertEquals("flush-me", shelf.events.single().data["scroll_id"]?.jsonPrimitive?.content)
+            assertEquals("flush-me", shelf.events.single()["scroll_id"]?.jsonPrimitive?.content)
         }
     }
 
     @Test
-    fun retire_called_from_saver_does_not_deadlock() {
+    fun cancelling_retire_caller_does_not_cancel_retirement() {
+        runSuspend {
+            coroutineScope {
+                val gate = CompletableDeferred<Unit>()
+                val firstWriteStarted = CompletableDeferred<Unit>()
+                val shelf = BlockingShelf(gate, firstWriteStarted)
+                val scribe = scribeWithScrollShelves(shelf)
+
+                scribe.newScroll(id = "survives-cancellation").seal(scribe)
+                firstWriteStarted.await()
+
+                val retireJob = launch { scribe.retire() }
+                withTimeout(2_000.milliseconds) {
+                    while (scribe.isIntakeOpen) yield()
+                }
+                withTimeout(2_000.milliseconds) { retireJob.cancelAndJoin() }
+                assertTrue(retireJob.isCancelled)
+
+                gate.complete(Unit)
+                withTimeout(2_000.milliseconds) { scribe.retire() }
+
+                assertEquals(
+                    "survives-cancellation",
+                    shelf.events.single()["scroll_id"]?.jsonPrimitive?.content,
+                )
+            }
+        }
+    }
+
+    @Test
+    fun dismiss_called_from_archivist_does_not_deadlock() {
         runSuspend {
             val retired = CompletableDeferred<Unit>()
             lateinit var scribe: Scribe
-            val saver = EntrySaver {
-                scribe.retire()
+            val archivist = Archivist {
+                scribe.dismiss()
                 retired.complete(Unit)
             }
-            scribe = scribeWithSavers(shelves = listOf(saver))
+            scribe = scribeWithArchivists(shelves = listOf(archivist))
 
-            scribe.note(tag = "payments", message = "started", level = Urgency.INFO, timestamp = 1L)
-            withTimeout(2_000) { retired.await() }
+            scribe.newScroll(id = "retire-1").seal(scribe)
+            withTimeout(2_000.milliseconds) { retired.await() }
         }
     }
 
     @Test
-    fun retire_called_from_saver_child_coroutine_does_not_deadlock() {
+    fun dismiss_called_from_archivist_child_coroutine_does_not_deadlock() {
         runSuspend {
             val retired = CompletableDeferred<Unit>()
             lateinit var scribe: Scribe
-            val saver = EntrySaver {
+            val archivist = Archivist {
                 coroutineScope {
                     launch {
-                        scribe.retire()
+                        scribe.dismiss()
                         retired.complete(Unit)
                     }
                 }
             }
-            scribe = scribeWithSavers(shelves = listOf(saver))
+            scribe = scribeWithArchivists(shelves = listOf(archivist))
 
-            scribe.note(tag = "payments", message = "started", level = Urgency.INFO, timestamp = 2L)
-            withTimeout(2_000) { retired.await() }
+            scribe.newScroll(id = "retire-2").seal(scribe)
+            withTimeout(2_000.milliseconds) { retired.await() }
         }
     }
 
     @Test
-    fun onSaverError_is_called_and_other_savers_continue() {
+    fun onArchivistError_is_called_and_other_archivists_continue() {
         runSuspend {
             val events = mutableListOf<Entry>()
             val errors = mutableListOf<Throwable>()
-            val failingSaver = EntrySaver { throw IllegalStateException("boom") }
-            val recordingSaver = RecordingEntrySaver()
-            val scribe = scribeWithSavers(
-                shelves = listOf(failingSaver, recordingSaver),
-                onSaver = { _, entry, error ->
+            val failureReported = CompletableDeferred<Unit>()
+            val failingArchivist = Archivist { throw IllegalStateException("boom") }
+            val recordingArchivist = RecordingShelf()
+            val scribe = scribeWithArchivists(
+                shelves = listOf(failingArchivist, recordingArchivist),
+                onArchivist = { _, entry, error ->
                     events += entry
                     errors += error
+                    failureReported.complete(Unit)
                 },
             )
 
-            scribe.note(tag = "payments", message = "started", level = Urgency.INFO, timestamp = 42L)
-            recordingSaver.awaitEvents(1)
+            scribe.newScroll(id = "error-1").seal(scribe)
+            recordingArchivist.awaitEvents(1)
+            failureReported.await()
             scribe.retire()
 
-            assertEquals(1, recordingSaver.events.size)
+            assertEquals(1, recordingArchivist.events.size)
             assertEquals(1, events.size)
             assertEquals(1, errors.size)
-            assertTrue(events.single() is Note)
+            val failedEntry = events.single()
+            assertEquals("error-1", failedEntry["scroll_id"]?.jsonPrimitive?.content)
             assertEquals("boom", errors.single().message)
         }
     }
 
     @Test
-    fun onSaverError_callback_failure_does_not_stop_delivery() {
+    fun onArchivistError_callback_failure_does_not_stop_delivery() {
         runSuspend {
-            val failingSaver = EntrySaver { throw IllegalStateException("boom") }
-            val recordingSaver = RecordingEntrySaver()
-            val scribe = scribeWithSavers(
-                shelves = listOf(failingSaver, recordingSaver),
-                onSaver = { _, _, _ ->
+            val failingArchivist = Archivist { throw IllegalStateException("boom") }
+            val recordingArchivist = RecordingShelf()
+            val scribe = scribeWithArchivists(
+                shelves = listOf(failingArchivist, recordingArchivist),
+                onArchivist = { _, _, _ ->
                     throw IllegalStateException("callback-failed")
                 },
             )
 
-            scribe.note(tag = "payments", message = "started", level = Urgency.INFO, timestamp = 10L)
-            scribe.note(tag = "payments", message = "continued", level = Urgency.INFO, timestamp = 11L)
-            recordingSaver.awaitEvents(2)
+            scribe.newScroll(id = "first").seal(scribe)
+            scribe.newScroll(id = "second").seal(scribe)
+            recordingArchivist.awaitEvents(2)
             scribe.retire()
 
-            assertEquals(2, recordingSaver.events.size)
+            assertEquals(2, recordingArchivist.events.size)
         }
     }
 
     @Test
-    fun saver_cancellation_is_not_reported_to_onSaver() {
+    fun archivist_cancellation_is_not_reported_to_onArchivist() {
         runSuspend {
             val reportedErrors = mutableListOf<Throwable>()
-            val cancelingSaver = EntrySaver { throw CancellationException("cancel-delivery") }
-            val scribe = scribeWithSavers(
-                shelves = listOf(cancelingSaver),
-                channel = Channel(capacity = 16),
-                onSaver = { _, _, error ->
+            val cancelingArchivist = Archivist { throw CancellationException("cancel-delivery") }
+            val scribe = scribeWithArchivists(
+                shelves = listOf(cancelingArchivist),
+                bufferCapacity = 16,
+                bufferOverflow = BufferOverflow.SUSPEND,
+                onArchivist = { _, _, error ->
                     reportedErrors += error
                 },
             )
 
-            scribe.note(tag = "payments", message = "started", level = Urgency.INFO, timestamp = 12L)
-            delay(50)
+            scribe.newScroll(id = "cancellation-probe").seal(scribe)
+            delay(50.milliseconds)
             scribe.retire()
 
             assertTrue(reportedErrors.isEmpty())

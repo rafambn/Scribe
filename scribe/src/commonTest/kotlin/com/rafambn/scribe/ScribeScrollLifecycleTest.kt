@@ -4,7 +4,6 @@ import kotlinx.serialization.json.JsonPrimitive
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
-import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
@@ -16,14 +15,13 @@ class ScribeScrollLifecycleTest {
             val scribe = scribeWithScrollShelves(shelf)
             val scroll = scribe.newScroll()
             scroll["method"] = JsonPrimitive("card")
-            scroll.seal(scribe, success = true)
+            scroll.seal(scribe)
             shelf.awaitEvents(1)
             scribe.retire()
 
             val event = shelf.events.single()
-            assertEquals(scroll.id, (event.data["scroll_id"] as? JsonPrimitive)?.content)
-            assertEquals(JsonPrimitive("card"), event.data["method"])
-            assertTrue(event.success)
+            assertEquals(scroll.id, (event["scroll_id"] as? JsonPrimitive)?.content)
+            assertEquals(JsonPrimitive("card"), event["method"])
         }
     }
 
@@ -36,15 +34,14 @@ class ScribeScrollLifecycleTest {
 
             scroll["gateway"] = JsonPrimitive("stripe")
 
-            scroll.seal(scribe, success = false)
-            scroll.seal(scribe, success = true)
+            scroll.seal(scribe)
+            scroll.seal(scribe)
             shelf.awaitEvents(2)
             scribe.retire()
             val firstEvent = shelf.events.first()
             val secondEvent = shelf.events.last()
-            assertFalse(firstEvent.success)
-            assertTrue(secondEvent.success)
-            assertEquals(JsonPrimitive("stripe"), firstEvent.data["gateway"])
+            assertEquals(JsonPrimitive("stripe"), firstEvent["gateway"])
+            assertEquals(JsonPrimitive("stripe"), secondEvent["gateway"])
         }
     }
 
@@ -62,18 +59,17 @@ class ScribeScrollLifecycleTest {
             assertFailsWith<IllegalStateException> {
                 paymentService.pay("order2", scroll2, scribe)
             }
-            scroll1.seal(scribe, success = true)
-            scroll2.seal(scribe, success = true)
-            shelf.awaitEvents(2)
+            scroll1.seal(scribe)
+            scroll2.seal(scribe)
+            shelf.awaitEvents(3)
             scribe.retire()
 
-            val successEvent = shelf.events.firstOrNull { (it.data["scroll_id"] as? JsonPrimitive)?.content == scroll1.id }
-            val failureEvent = shelf.events.firstOrNull { (it.data["scroll_id"] as? JsonPrimitive)?.content == scroll2.id }
+            val successEvent = shelf.events.firstOrNull { (it["scroll_id"] as? JsonPrimitive)?.content == scroll1.id }
+            val failureEvent = shelf.events.firstOrNull { it["error_stage"] != null }
 
             assertNotNull(successEvent)
             assertNotNull(failureEvent)
-            assertTrue(successEvent.success)
-            assertFalse(failureEvent.success)
+            assertEquals(JsonPrimitive("gateway_call"), failureEvent["error_stage"])
         }
     }
 
@@ -103,7 +99,7 @@ class ScribeScrollLifecycleTest {
 
             val event = shelf.events.single()
             assertEquals("session-42", scroll.id)
-            assertEquals("session-42", (event.data["scroll_id"] as? JsonPrimitive)?.content)
+            assertEquals("session-42", (event["scroll_id"] as? JsonPrimitive)?.content)
         }
     }
 

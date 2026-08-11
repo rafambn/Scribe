@@ -12,46 +12,60 @@ internal val UUID_REGEX =
     Regex("^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$")
 
 internal fun scribeWithScrollShelves(
-    vararg shelves: ScrollSaver,
+    vararg shelves: Archivist,
     imprint: Map<String, JsonElement> = emptyMap(),
-    channel: Channel<Entry> = Channel(capacity = 256, onBufferOverflow = BufferOverflow.DROP_OLDEST),
-    onSaver: (saver: Saver<*>, entry: Entry, error: Throwable) -> Unit = { _, _, _ -> },
+    bufferCapacity: Int = 256,
+    bufferOverflow: BufferOverflow = BufferOverflow.DROP_OLDEST,
+    onArchivist: (archivist: Archivist, entry: Entry, error: Throwable) -> Unit = { _, _, _ -> },
     margins: Margin? = null,
+    startProcessing: Boolean = true,
 ): Scribe {
     val configuredShelves = shelves.toList()
     val configuredImprint = imprint
     val configuredMargins = margins
+    val configuredBufferCapacity = bufferCapacity
+    val configuredBufferOverflow = bufferOverflow
     return object : Scribe() {
-        override val shelves: List<Saver<*>> = configuredShelves
+        override val archivists: List<Archivist> = configuredShelves
+        override val bufferCapacity: Int = configuredBufferCapacity
+        override val bufferOverflow: BufferOverflow = configuredBufferOverflow
+        override val onArchiveFailure = onArchivist
         override val imprint: Map<String, JsonElement> = configuredImprint
         override val margins: Margin? = configuredMargins
     }.also {
-        it.hire(channel = channel, onSaver = onSaver)
+        if (startProcessing) it.hire()
     }
 }
 
-internal fun scribeWithSavers(
-    shelves: List<Saver<*>>,
+internal fun scribeWithArchivists(
+    shelves: List<Archivist>,
     imprint: Map<String, JsonElement> = emptyMap(),
     margins: Margin? = null,
-    channel: Channel<Entry> = Channel(capacity = 256, onBufferOverflow = BufferOverflow.DROP_OLDEST),
-    onSaver: (saver: Saver<*>, entry: Entry, error: Throwable) -> Unit = { _, _, _ -> },
+    bufferCapacity: Int = 256,
+    bufferOverflow: BufferOverflow = BufferOverflow.DROP_OLDEST,
+    onArchivist: (archivist: Archivist, entry: Entry, error: Throwable) -> Unit = { _, _, _ -> },
+    startProcessing: Boolean = true,
 ): Scribe {
     val configuredShelves = shelves
     val configuredImprint = imprint
     val configuredMargins = margins
+    val configuredBufferCapacity = bufferCapacity
+    val configuredBufferOverflow = bufferOverflow
     return object : Scribe() {
-        override val shelves: List<Saver<*>> = configuredShelves
+        override val archivists: List<Archivist> = configuredShelves
+        override val bufferCapacity: Int = configuredBufferCapacity
+        override val bufferOverflow: BufferOverflow = configuredBufferOverflow
+        override val onArchiveFailure = onArchivist
         override val imprint: Map<String, JsonElement> = configuredImprint
         override val margins: Margin? = configuredMargins
     }.also {
-        it.hire(channel = channel, onSaver = onSaver)
+        if (startProcessing) it.hire()
     }
 }
 
 internal fun <T> runSuspend(block: suspend () -> T): T = runBlocking { block() }
 
-internal fun createScribeInHelperAndEmit(shelf: ScrollSaver): Scribe {
+internal fun createScribeInHelperAndEmit(shelf: Archivist): Scribe {
     val scribe = scribeWithScrollShelves(shelf)
     scribe.newScroll(id = "scoped").seal(scribe)
     return scribe
@@ -67,7 +81,7 @@ internal class PaymentService {
             scroll["gateway"] = JsonPrimitive("stripe")
         } catch (t: Throwable) {
             scroll["error_stage"] = JsonPrimitive("gateway_call")
-            scroll.seal(scribe, success = false)
+            scroll.seal(scribe)
             throw t
         }
     }
@@ -76,13 +90,11 @@ internal class PaymentService {
 @Serializable
 internal data class GatewayMeta(val retries: Int)
 
-internal data class NonSerializableMeta(val retries: Int)
-
-internal class RecordingShelf : ScrollSaver {
-    val events = mutableListOf<SealedScroll>()
+internal class RecordingShelf : Archivist {
+    val events = mutableListOf<Entry>()
     private val writes = Channel<Unit>(Channel.UNLIMITED)
 
-    override suspend fun write(event: SealedScroll) {
+    override suspend fun write(event: Entry) {
         events += event
         writes.trySend(Unit)
     }
@@ -97,45 +109,13 @@ internal class RecordingShelf : ScrollSaver {
 internal class BlockingShelf(
     private val gate: CompletableDeferred<Unit>,
     private val firstWriteStarted: CompletableDeferred<Unit>? = null,
-) : ScrollSaver {
-    val events = mutableListOf<SealedScroll>()
-    private val writes = Channel<Unit>(Channel.UNLIMITED)
-
-    override suspend fun write(event: SealedScroll) {
-        firstWriteStarted?.complete(Unit)
-        gate.await()
-        events += event
-        writes.trySend(Unit)
-    }
-
-    suspend fun awaitEvents(count: Int) {
-        repeat(count) {
-            writes.receive()
-        }
-    }
-}
-
-internal class RecordingNoteSaver : NoteSaver {
-    val events = mutableListOf<Note>()
-    private val writes = Channel<Unit>(Channel.UNLIMITED)
-
-    override suspend fun write(event: Note) {
-        events += event
-        writes.trySend(Unit)
-    }
-
-    suspend fun awaitEvents(count: Int) {
-        repeat(count) {
-            writes.receive()
-        }
-    }
-}
-
-internal class RecordingEntrySaver : EntrySaver {
+) : Archivist {
     val events = mutableListOf<Entry>()
     private val writes = Channel<Unit>(Channel.UNLIMITED)
 
     override suspend fun write(event: Entry) {
+        firstWriteStarted?.complete(Unit)
+        gate.await()
         events += event
         writes.trySend(Unit)
     }

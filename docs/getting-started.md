@@ -8,7 +8,7 @@ Use the library from shared code in your Kotlin Multiplatform module:
 kotlin {
     sourceSets {
         commonMain.dependencies {
-            implementation("com.rafambn:scribe:0.4.0")
+            implementation("com.rafambn:scribe:0.6.0")
         }
     }
 }
@@ -16,48 +16,43 @@ kotlin {
 
 ## Create a Minimal `Scribe`
 
-Create an object that extends `Scribe`, override its savers, then hire that
-object's runtime with a `Channel<Entry>`.
+Create an object that extends `Scribe`, configure its private buffer, then hire its processor.
 
 ```kotlin
 object AppScribe : Scribe() {
-    override val shelves: List<Saver<*>> = listOf(NoteSaver { note ->
-        println("[${note.level}] ${note.tag}: ${note.message}")
+    override val archivists: List<Archivist> = listOf(Archivist { entry ->
+        println(entry)
     })
 }
 
-AppScribe.hire(
-    channel = Channel(
-        capacity = 256,
-        onBufferOverflow = BufferOverflow.DROP_OLDEST,
-    ),
-)
+AppScribe.hire()
 ```
 
 ## Emit a Single Event
 
-Use `note(...)` for standalone events:
+Every event is a scroll. For a standalone event, build a scroll and seal it
+immediately:
 
 ```kotlin
-AppScribe.note(
-    tag = "payments",
-    message = "starting checkout",
-    level = Urgency.INFO,
-)
+val scroll = AppScribe.newScroll()
+scroll["tag"] = JsonPrimitive("payments")
+scroll["message"] = JsonPrimitive("starting checkout")
+scroll["level"] = JsonPrimitive("INFO")
+scroll.seal(AppScribe)
 ```
 
-With the saver above, the log output looks like this:
+With the archivist above, the log output looks like this:
 
 ```text
-[INFO] payments: starting checkout
+{scroll_id=..., tag=payments, message=starting checkout, level=INFO}
 ```
 
 ## Track a Flow with `Scroll`
 
 `Scroll` is a mutable map of JSON elements initialized by `newScroll(...)`.
 When sealing it, supply the `Scribe` runtime that should apply its footer
-margin and deliver the event. Each `seal(...)` call emits a new
-`SealedScroll` using a snapshot of the scroll data at that moment.
+margin and deliver the event. Each `seal(...)` call emits a new snapshot of
+the scroll data at that moment.
 
 You can also merge other scrolls or nest them:
 
@@ -82,7 +77,7 @@ scroll["cart"] = Json.encodeToJsonElement(
     CheckoutMeta.serializer(),
     CheckoutMeta(itemCount = 3, subtotalCents = 249_900, featureFlag = "wide-events"),
 )
-scroll.seal(AppScribe, success = true)
+scroll.seal(AppScribe)
 ```
 
 ## Use Multiple Runtimes
@@ -92,51 +87,53 @@ application may supply a configured object to a component.
 
 ```kotlin
 object PaymentsScribe : Scribe() {
-    override val shelves: List<Saver<*>> = listOf(EntrySaver { sendPaymentsRecord(it) })
+    override val bufferCapacity = 256
+    override val bufferOverflow = BufferOverflow.DROP_OLDEST
+    override val onArchiveFailure: ((Archivist, Entry, Throwable) -> Unit)? = null
+    override val archivists: List<Archivist> = listOf(Archivist { sendPaymentsRecord(it) })
 }
 
 object AnalyticsScribe : Scribe() {
-    override val shelves: List<Saver<*>> = listOf(EntrySaver { sendAnalyticsRecord(it) })
+    override val bufferCapacity = 256
+    override val bufferOverflow = BufferOverflow.DROP_OLDEST
+    override val onArchiveFailure: ((Archivist, Entry, Throwable) -> Unit)? = null
+    override val archivists: List<Archivist> = listOf(Archivist { sendAnalyticsRecord(it) })
 }
 
-PaymentsScribe.hire(channel = Channel(256))
-AnalyticsScribe.hire(channel = Channel(256))
+PaymentsScribe.hire()
+AnalyticsScribe.hire()
 ```
 
-Retiring `PaymentsScribe` does not stop `AnalyticsScribe`.
+Dismissing `PaymentsScribe` pauses only its job and does not stop `AnalyticsScribe`.
 
-The emitted `SealedScroll` shape:
+The emitted event shape is the scroll map itself:
 
 ```json
 {
-  "success": true,
-  "data": {
-    "scroll_id": "checkout-42",
-    "gateway": "stripe",
-    "attempt": 1,
-    "retry": false,
-    "cart": {
-      "item_count": 3,
-      "subtotal_cents": 249900,
-      "feature_flag": "wide-events"
-    }
+  "scroll_id": "checkout-42",
+  "gateway": "stripe",
+  "attempt": 1,
+  "retry": false,
+  "cart": {
+    "item_count": 3,
+    "subtotal_cents": 249900,
+    "feature_flag": "wide-events"
   }
 }
 ```
 
-## Choose the Right Saver
+## Choose the Right Archivist
 
 ```kotlin
-val noteSaver = NoteSaver { note -> println(note) }
-val scrollSaver = ScrollSaver { scroll -> println(scroll) }
-val entrySaver = EntrySaver { entry -> println(entry) }
+val scrollArchivist = Archivist { scroll -> println(scroll) }
 ```
 
-- `NoteSaver` handles only `Note`
-- `ScrollSaver` handles only `SealedScroll`
-- `EntrySaver` handles both
+- Every archivist receives `Entry` snapshots
+- `Archivist` is a functional interface: `Archivist { entry -> ... }` is all you need
+- Add multiple archivists to a `Scribe` object to fan out to several outputs
 
 ## What to Read Next
 
 - [API Concepts](api-concepts.md) for the core types and terminology
-- [Lifecycle and Delivery](lifecycle-and-delivery.md) for channel behavior, margins, shutdown, and saver error callbacks
+- [Lifecycle and Delivery](lifecycle-and-delivery.md) for intake, processing, retirement, and archivist error callbacks
+- [SLF4J Provider](slf4j.md) for using Scribe as a JVM SLF4J 2.x provider
