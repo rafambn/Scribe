@@ -5,12 +5,13 @@ import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.channels.BufferOverflow
-import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.yield
 import kotlinx.serialization.json.jsonPrimitive
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -230,6 +231,36 @@ class ScribeDeliveryRetireTest {
             retireScope.cancel()
 
             assertEquals("flush-me", shelf.events.single()["scroll_id"]?.jsonPrimitive?.content)
+        }
+    }
+
+    @Test
+    fun cancelling_retire_caller_does_not_cancel_retirement() {
+        runSuspend {
+            coroutineScope {
+                val gate = CompletableDeferred<Unit>()
+                val firstWriteStarted = CompletableDeferred<Unit>()
+                val shelf = BlockingShelf(gate, firstWriteStarted)
+                val scribe = scribeWithScrollShelves(shelf)
+
+                scribe.newScroll(id = "survives-cancellation").seal(scribe)
+                firstWriteStarted.await()
+
+                val retireJob = launch { scribe.retire() }
+                withTimeout(2_000.milliseconds) {
+                    while (scribe.isIntakeOpen) yield()
+                }
+                withTimeout(2_000.milliseconds) { retireJob.cancelAndJoin() }
+                assertTrue(retireJob.isCancelled)
+
+                gate.complete(Unit)
+                withTimeout(2_000.milliseconds) { scribe.retire() }
+
+                assertEquals(
+                    "survives-cancellation",
+                    shelf.events.single()["scroll_id"]?.jsonPrimitive?.content,
+                )
+            }
         }
     }
 

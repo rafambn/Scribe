@@ -1,9 +1,9 @@
 package com.rafambn.scribe.testserver
 
 import com.sun.net.httpserver.HttpServer
-import java.net.InetSocketAddress
 import kotlinx.coroutines.runBlocking
 import org.slf4j.LoggerFactory
+import java.net.InetSocketAddress
 
 private const val SERVER_PORT = 8080
 private val logger = LoggerFactory.getLogger("TestServer")

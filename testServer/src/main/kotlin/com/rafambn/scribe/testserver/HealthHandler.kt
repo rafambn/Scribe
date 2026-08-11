@@ -4,9 +4,9 @@ import com.rafambn.scribe.seal
 import com.sun.net.httpserver.HttpExchange
 import com.sun.net.httpserver.HttpHandler
 import kotlinx.serialization.json.JsonPrimitive
-import java.nio.charset.StandardCharsets
 import org.slf4j.LoggerFactory
 import org.slf4j.MDC
+import java.nio.charset.StandardCharsets
 
 object HealthHandler : HttpHandler {
     private val logger = LoggerFactory.getLogger(HealthHandler::class.java)

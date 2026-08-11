@@ -3,9 +3,8 @@ package com.rafambn.scribe.slf4j
 import com.rafambn.scribe.Archivist
 import com.rafambn.scribe.Entry
 import com.rafambn.scribe.seal
-import java.util.concurrent.CopyOnWriteArrayList
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.channels.BufferOverflow
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import kotlinx.serialization.json.JsonPrimitive
@@ -14,6 +13,7 @@ import org.slf4j.MDC
 import org.slf4j.Marker
 import org.slf4j.MarkerFactory
 import org.slf4j.event.Level
+import java.util.concurrent.CopyOnWriteArrayList
 import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals

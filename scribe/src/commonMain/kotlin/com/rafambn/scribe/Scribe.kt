@@ -171,22 +171,25 @@ abstract class Scribe {
             "retire() cannot be called from an archivist; request it from the lifecycle owner."
         }
 
-        if (!retiring.compareAndSet(expectedValue = false, newValue = true)) {
-            retirementCompleted.await()
-            return
-        }
-
-        try {
+        if (retiring.compareAndSet(expectedValue = false, newValue = true)) {
             intakeOpen.store(false)
             processingEnabled.value = true
             queue.close()
-            processorJob.join()
-            ownedScope.cancel()
-            retirementCompleted.complete(Unit)
-        } catch (error: Throwable) {
-            retirementCompleted.completeExceptionally(error)
-            throw error
+
+            val processor = processorJob
+            ownedScope.launch {
+                try {
+                    processor.join()
+                    retirementCompleted.complete(Unit)
+                } catch (error: Throwable) {
+                    retirementCompleted.completeExceptionally(error)
+                } finally {
+                    ownedScope.cancel()
+                }
+            }
         }
+
+        retirementCompleted.await()
     }
 
     /**
