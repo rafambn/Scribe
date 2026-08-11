@@ -2,9 +2,7 @@ rootProject.name = "Scribe"
 
 include(":scribe")
 include(":scribe-slf4j")
-include(":testApp:shared")
-include(":testApp:androidApp")
-include(":testApp:jvmApp")
+include(":testServer")
 
 pluginManagement {
     repositories {

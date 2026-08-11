@@ -40,16 +40,16 @@ abstract class Scribe {
     /**
      * Archivists receiving structured logs emitted by this instance.
      */
-    protected abstract val archivists: List<Archivist>
+    protected open val archivists: List<Archivist> = emptyList()
 
     /** Maximum number of entries retained by this instance's private buffer. */
-    protected abstract val bufferCapacity: Int
+    protected open val bufferCapacity: Int = 256
 
     /** Overflow behavior used when this instance's private buffer is full. */
-    protected abstract val bufferOverflow: BufferOverflow
+    protected open val bufferOverflow: BufferOverflow = BufferOverflow.DROP_OLDEST
 
     /** Callback invoked when an archivist fails to write an entry. */
-    protected abstract val onArchiveFailure: ((archivist: Archivist, entry: Entry, error: Throwable) -> Unit)?
+    protected open val onArchiveFailure: ((archivist: Archivist, entry: Entry, error: Throwable) -> Unit)? = null
 
     /**
      * Fields copied into every [Scroll] created by this instance.

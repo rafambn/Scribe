@@ -37,4 +37,3 @@ That pushes logging toward "what happened to this request or workflow?" instead 
 - [Getting Started](getting-started.md) for setup and first usage
 - [API Concepts](api-concepts.md) for terminology and data model
 - [Lifecycle and Delivery](lifecycle-and-delivery.md) for buffering, intake, processing, and retirement
-- [Console Showcase](console-showcase.md) for the runnable demo app and printed event records
