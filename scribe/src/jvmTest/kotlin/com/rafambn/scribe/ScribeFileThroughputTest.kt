@@ -82,13 +82,13 @@ class ScribeFileThroughputTest {
 
         scribe.retire()
         archivist.close()
-        
+
         val duration = start.elapsedNow()
 
         // Verification
         val lines = testFile.readLines()
         assertEquals(iterations, lines.size, "Line count mismatch. Possible data loss.")
-        
+
         // Check for corruption (ensure each line is a valid JSON and belongs to Scribe)
         lines.forEach { line ->
             assertTrue(line.startsWith("{") && line.endsWith("}"), "Interleaved or corrupt line: $line")
