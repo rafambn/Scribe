@@ -105,9 +105,6 @@ abstract class Scribe {
     val isProcessing: Boolean
         get() = processingEnabled.value
 
-    internal open fun registerIgnitionHandler(callback: (Throwable) -> Unit): () -> Unit =
-        registerGlobalIgnitionHandler(callback)
-
     /**
      * Starts or resumes delivery from this instance's private buffer.
      *
@@ -127,7 +124,7 @@ abstract class Scribe {
                 }
 
                 try {
-                    val uninstall = registerIgnitionHandler(exceptionHandler)
+                    val uninstall = registerGlobalIgnitionHandler(exceptionHandler)
                     if (ignitionRegistration.compareAndSet(null, uninstall)) {
                         if (retiring.load()) {
                             removeIgnitionRegistration()

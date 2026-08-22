@@ -4,6 +4,9 @@ import java.util.Collections
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
+import io.mockk.every
+import io.mockk.mockkStatic
+import io.mockk.unmockkStatic
 import kotlinx.coroutines.runBlocking
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -18,6 +21,14 @@ class ScribeIgnitionRegistrationJvmTest {
         val bothHiresStarted = CountDownLatch(2)
         val registrationCalls = AtomicInteger(0)
         val failures = Collections.synchronizedList(mutableListOf<Throwable>())
+        mockkStatic(::registerGlobalIgnitionHandler)
+        every { registerGlobalIgnitionHandler(any()) } answers {
+            if (registrationCalls.incrementAndGet() == 1) {
+                firstRegistrationStarted.countDown()
+                releaseFirstRegistration.await(2, TimeUnit.SECONDS)
+            }
+            throw UnsupportedOperationException("registration failed")
+        }
         val scribe = object : Scribe() {
             override val archivists: List<Archivist>
                 get() {
@@ -26,14 +37,6 @@ class ScribeIgnitionRegistrationJvmTest {
                 }
 
             override val onIgnition: ((Throwable) -> Unit) = {}
-
-            override fun registerIgnitionHandler(callback: (Throwable) -> Unit): () -> Unit {
-                if (registrationCalls.incrementAndGet() == 1) {
-                    firstRegistrationStarted.countDown()
-                    releaseFirstRegistration.await(2, TimeUnit.SECONDS)
-                }
-                throw UnsupportedOperationException("registration failed")
-            }
         }
         val first = Thread {
             try {
@@ -71,6 +74,7 @@ class ScribeIgnitionRegistrationJvmTest {
             releaseFirstRegistration.countDown()
             first.join(2_000)
             second.join(2_000)
+            unmockkStatic(::registerGlobalIgnitionHandler)
             runBlocking {
                 if (scribe.isIntakeOpen) {
                     scribe.retire()

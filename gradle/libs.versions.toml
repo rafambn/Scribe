@@ -9,6 +9,7 @@ kotlinxSerialization = "1.11.0"
 kotlinxCoroutines = "1.11.0"
 slf4j = "2.0.18"
 classgraph = "4.8.181"
+mockk = "1.14.11"
 
 [libraries]
 kotlin-test = { module = "org.jetbrains.kotlin:kotlin-test", version.ref = "kotlin" }
@@ -19,6 +20,7 @@ kotlinx-coroutines-test = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-t
 scribe = { module = "com.rafambn:scribe", version = "0.7.0" }
 slf4j-api = { module = "org.slf4j:slf4j-api", version.ref = "slf4j" }
 classgraph = { module = "io.github.classgraph:classgraph", version.ref = "classgraph" }
+mockk = { module = "io.mockk:mockk", version.ref = "mockk" }
 
 [plugins]
 android-kotlin-multiplatform-library = { id = "com.android.kotlin.multiplatform.library", version.ref = "agp" }
