@@ -82,7 +82,15 @@ in the backend's private buffer.
 
 ## Uncaught Exceptions
 
-Override `onIgnition` on an application-owned `Scribe` to install the platform uncaught exception
-hook when processing is first hired. The hook is platform-global even though it is configured on
-one instance. Archivist failures are handled separately by the implementation's
-`onArchiveFailure` property.
+Override `onIgnition` on an application-owned `Scribe` to observe platform-level failures. The
+callback is registered on the first `hire()` and unregistered during `retire()`. Scribe installs
+one internal platform dispatcher and delivers each failure once to every active Scribe callback;
+callback failures are isolated and the previous platform handler is preserved. Browser JS and
+wasmJs observe synchronous global errors and unhandled Promise rejections. Node observes uncaught
+exceptions through `uncaughtExceptionMonitor`, using its `origin` argument to distinguish ordinary
+uncaught exceptions from promoted unhandled rejections, without replacing Node's normal termination
+path. A rejection is visible there only when the host's current `--unhandled-rejections` policy
+promotes it. wasmWasi has no portable global hook, so a non-null `onIgnition` makes `hire()` fail with
+an unsupported-operation message; normal logging works when it is null. Fatal delivery is best effort
+and does not wait for the asynchronous Scribe buffer to drain. Archivist failures are handled
+separately by the implementation's `onArchiveFailure` property.

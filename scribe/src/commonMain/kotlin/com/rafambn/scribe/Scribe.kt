@@ -19,6 +19,7 @@ import kotlinx.coroutines.launch
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonPrimitive
 import kotlin.concurrent.atomics.AtomicBoolean
+import kotlin.concurrent.atomics.AtomicReference
 import kotlin.concurrent.atomics.ExperimentalAtomicApi
 
 /**
@@ -64,6 +65,7 @@ abstract class Scribe {
     /**
      * Optional uncaught exception callback.
      *
+     * It is registered on the first [hire] and unregistered during [retire].
      * Although configured on an instance, uncaught exception handling is a
      * platform-global hook and should normally be owned by the application.
      */
@@ -79,7 +81,7 @@ abstract class Scribe {
     private val intakeOpen = AtomicBoolean(true)
     private val processingEnabled = MutableStateFlow(false)
     private val retiring = AtomicBoolean(false)
-    private val ignitionInstalled = AtomicBoolean(false)
+    private val ignitionRegistration = AtomicReference<(() -> Unit)?>(null)
     private val retirementCompleted = CompletableDeferred<Unit>()
     private val processorJob: Job by lazy {
         ownedScope.launch {
@@ -113,8 +115,15 @@ abstract class Scribe {
         require(configuredArchivists.isNotEmpty()) { "At least one archivist is required." }
         check(!retiring.load()) { "This Scribe has been retired." }
         val exceptionHandler = onIgnition
-        if (exceptionHandler != null && ignitionInstalled.compareAndSet(expectedValue = false, newValue = true)) {
-            installUncaughtExceptionHandler(exceptionHandler)
+        if (exceptionHandler != null && ignitionRegistration.load() == null) {
+            val uninstall = registerGlobalIgnitionHandler(exceptionHandler)
+            if (!ignitionRegistration.compareAndSet(null, uninstall)) {
+                uninstall()
+            }
+            if (retiring.load()) {
+                removeIgnitionRegistration()
+                check(!retiring.load()) { "This Scribe has been retired." }
+            }
         }
 
         val processor = processorJob
@@ -173,6 +182,7 @@ abstract class Scribe {
 
         if (retiring.compareAndSet(expectedValue = false, newValue = true)) {
             intakeOpen.store(false)
+            removeIgnitionRegistration()
             processingEnabled.value = true
             queue.close()
 
@@ -214,6 +224,16 @@ abstract class Scribe {
     internal fun enqueue(entry: Entry): Boolean {
         if (!isIntakeOpen) return false
         return queue.trySend(entry).isSuccess
+    }
+
+    private fun removeIgnitionRegistration() {
+        while (true) {
+            val uninstall = ignitionRegistration.load() ?: return
+            if (ignitionRegistration.compareAndSet(uninstall, null)) {
+                uninstall()
+                return
+            }
+        }
     }
 
     private suspend fun archive(

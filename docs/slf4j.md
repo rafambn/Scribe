@@ -9,7 +9,7 @@ Add the provider to a JVM application's runtime dependencies:
 
 ```kotlin
 dependencies {
-    implementation("com.rafambn:scribe-slf4j:0.6.0")
+    implementation("com.rafambn:scribe-slf4j:0.7.0")
 }
 ```
 

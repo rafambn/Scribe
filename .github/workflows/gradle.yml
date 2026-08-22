@@ -1,59 +1,174 @@
-# This workflow uses actions that are not certified by GitHub.
-# They are provided by a third-party and are governed by
-# separate terms of service, privacy policy, and support
-# documentation.
-# This workflow will build a Java project with Gradle and cache/restore any dependencies to improve the workflow execution time
-# For more information see: https://docs.github.com/en/actions/automating-builds-and-tests/building-and-testing-java-with-gradle
-
 name: Java CI with Gradle
 
 on:
   push:
-    branches: [ "main" ]
+    branches: ["main"]
   pull_request:
-    branches: [ "main" ]
+    branches: ["main"]
   workflow_call:
 
 permissions:
   contents: read
 
+env:
+  GRADLE_OPTS: -Dorg.gradle.daemon=false
+
 jobs:
-  build:
+  compile:
+    name: Compile ${{ matrix.name }}
     strategy:
+      fail-fast: false
       matrix:
         include:
-          - target: jvmTest
+          - name: JVM
             os: ubuntu-latest
-          - target: :scribe-slf4j:test
+            task: :scribe:compileKotlinJvm
+          - name: Android
             os: ubuntu-latest
-          - target: iosArm64TestKlibrary
+            task: :scribe:compileAndroidMain
+          - name: JS
+            os: ubuntu-latest
+            task: :scribe:compileKotlinJs
+          - name: wasmJs
+            os: ubuntu-latest
+            task: :scribe:compileKotlinWasmJs
+          - name: wasmWasi
+            os: ubuntu-latest
+            task: :scribe:compileKotlinWasmWasi
+          - name: androidNativeArm32
+            os: ubuntu-latest
+            task: :scribe:compileKotlinAndroidNativeArm32
+          - name: androidNativeArm64
+            os: ubuntu-latest
+            task: :scribe:compileKotlinAndroidNativeArm64
+          - name: androidNativeX86
+            os: ubuntu-latest
+            task: :scribe:compileKotlinAndroidNativeX86
+          - name: androidNativeX64
+            os: ubuntu-latest
+            task: :scribe:compileKotlinAndroidNativeX64
+          - name: iosArm64
             os: macos-latest
-          - target: testAndroidHostTest
-            os: ubuntu-latest
-          - target: :scribe:linuxX64Test
-            os: ubuntu-latest
-          - target: :scribe:macosArm64Test
+            task: :scribe:compileKotlinIosArm64
+          - name: iosSimulatorArm64
             os: macos-latest
-          - target: :scribe:mingwX64Test
+            task: :scribe:compileKotlinIosSimulatorArm64
+          - name: iosX64
+            os: macos-latest
+            task: :scribe:compileKotlinIosX64
+          - name: macosArm64
+            os: macos-latest
+            task: :scribe:compileKotlinMacosArm64
+          - name: tvosArm64
+            os: macos-latest
+            task: :scribe:compileKotlinTvosArm64
+          - name: tvosSimulatorArm64
+            os: macos-latest
+            task: :scribe:compileKotlinTvosSimulatorArm64
+          - name: watchosArm32
+            os: macos-latest
+            task: :scribe:compileKotlinWatchosArm32
+          - name: watchosArm64
+            os: macos-latest
+            task: :scribe:compileKotlinWatchosArm64
+          - name: watchosDeviceArm64
+            os: macos-latest
+            task: :scribe:compileKotlinWatchosDeviceArm64
+          - name: watchosSimulatorArm64
+            os: macos-latest
+            task: :scribe:compileKotlinWatchosSimulatorArm64
+          - name: linuxArm64
+            os: ubuntu-latest
+            task: :scribe:compileKotlinLinuxArm64
+          - name: linuxX64
+            os: ubuntu-latest
+            task: :scribe:compileKotlinLinuxX64
+          - name: mingwX64
             os: windows-latest
+            task: :scribe:compileKotlinMingwX64
     runs-on: ${{ matrix.os }}
-
     steps:
-    - uses: actions/checkout@v4
-    - name: Validate Gradle Wrapper
-      uses: gradle/actions/wrapper-validation@v4
-    - uses: actions/cache@v4
-      with:
-        path: |
-          ~/.konan
-          ${{ env.USERPROFILE }}\.konan
-        key: ${{ runner.os }}-${{ hashFiles('**/.lock') }}
-    - name: Set up JDK 17
-      uses: actions/setup-java@v3
-      with:
-        java-version: '17'
-        distribution: 'temurin'
-    - name: Build with Gradle
-      uses: gradle/gradle-build-action@ce999babab2de1c4b649dc15f0ee67e6246c994f
-      with:
-        arguments: ${{ matrix.target }}
+      - uses: actions/checkout@v4
+      - name: Validate Gradle Wrapper
+        uses: gradle/actions/wrapper-validation@v4
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.konan
+            ${{ env.USERPROFILE }}\.konan
+          key: ${{ runner.os }}-${{ hashFiles('**/.lock') }}
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: temurin
+      - name: Compile target
+        uses: gradle/gradle-build-action@ce999babab2de1c4b649dc15f0ee67e6246c994f
+        with:
+          arguments: ${{ matrix.task }} --no-configuration-cache
+
+  runtime:
+    name: Test ${{ matrix.name }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: JVM
+            os: ubuntu-latest
+            task: :scribe:jvmTest
+          - name: Android host
+            os: ubuntu-latest
+            task: :scribe:testAndroidHostTest
+          - name: SLF4J JVM
+            os: ubuntu-latest
+            task: :scribe-slf4j:test
+          - name: LinuxX64
+            os: ubuntu-latest
+            task: :scribe:linuxX64Test
+          - name: JS Node
+            os: ubuntu-latest
+            task: :scribe:jsNodeTest
+          - name: wasmJs Node
+            os: ubuntu-latest
+            task: :scribe:wasmJsNodeTest
+          - name: wasmWasi Node
+            os: ubuntu-latest
+            task: :scribe:wasmWasiNodeTest
+          - name: JS Chrome Headless
+            os: ubuntu-latest
+            browser: true
+            task: :scribe:jsBrowserTest
+          - name: wasmJs Chrome Headless
+            os: ubuntu-latest
+            browser: true
+            task: :scribe:wasmJsBrowserTest
+          - name: macOS Arm64
+            os: macos-latest
+            task: :scribe:macosArm64Test
+          - name: iOS simulator
+            os: macos-latest
+            task: :scribe:iosSimulatorArm64Test
+          - name: tvOS simulator
+            os: macos-latest
+            task: :scribe:tvosSimulatorArm64Test
+          - name: watchOS simulator
+            os: macos-latest
+            task: :scribe:watchosSimulatorArm64Test
+          - name: MinGW
+            os: windows-latest
+            task: :scribe:mingwX64Test
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Chrome Headless
+        if: matrix.browser == true
+        uses: browser-actions/setup-chrome@v1
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: temurin
+      - name: Run target tests
+        uses: gradle/gradle-build-action@ce999babab2de1c4b649dc15f0ee67e6246c994f
+        with:
+          arguments: ${{ matrix.task }} --no-configuration-cache

@@ -4,11 +4,13 @@
 
 Use the library from shared code in your Kotlin Multiplatform module:
 
+The published artifacts are available from Maven Central. Add the dependency to your shared source set:
+
 ```kotlin
 kotlin {
     sourceSets {
         commonMain.dependencies {
-            implementation("com.rafambn:scribe:0.6.0")
+            implementation("com.rafambn:scribe:0.7.0")
         }
     }
 }
@@ -105,6 +107,22 @@ AnalyticsScribe.hire()
 ```
 
 Dismissing `PaymentsScribe` pauses only its job and does not stop `AnalyticsScribe`.
+
+## Version 0.7.0 targets and runtime requirements
+
+The core module publishes exactly 22 targets: `jvm`, `android`, `js`, `wasmJs`,
+`wasmWasi`, `androidNativeArm32`, `androidNativeArm64`, `androidNativeX86`,
+`androidNativeX64`, `iosArm64`, `iosSimulatorArm64`, `iosX64`, `macosArm64`,
+`tvosArm64`, `tvosSimulatorArm64`, `watchosArm32`, `watchosArm64`,
+`watchosDeviceArm64`, `watchosSimulatorArm64`, `linuxArm64`, `linuxX64`, and
+`mingwX64`. JS and wasmJs support browser and Node.js environments; wasmWasi is
+configured for Node.js. Scribe 0.7.0 inherits Kotlin `2.4.10`, kotlinx.serialization
+`1.11.0`, and kotlinx.coroutines `1.11.0`. The separate `scribe-slf4j` artifact is
+JVM-only.
+
+`onIgnition` observes global uncaught failures after the first `hire()` and is
+unregistered by `retire()`. wasmWasi has no portable global hook; configure
+`onIgnition = null` there or `hire()` reports an unsupported-operation error.
 
 The emitted event shape is the scroll map itself:
 
