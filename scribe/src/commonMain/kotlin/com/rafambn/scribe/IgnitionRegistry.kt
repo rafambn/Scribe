@@ -36,6 +36,9 @@ internal object IgnitionRegistry {
             }
 
             try {
+                if (state.load().subscriptions.isNotEmpty()) {
+                    continue
+                }
                 val uninstall = installUncaughtExceptionHandler(::dispatch)
                 val next = State(listOf(subscription), uninstall)
                 if (state.compareAndSet(current, next)) {

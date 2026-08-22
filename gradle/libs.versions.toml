@@ -4,11 +4,9 @@ kotlin = "2.4.10"
 compose-multiplatform = "1.11.1"
 android-minSdk = "24"
 android-compileSdk = "37"
-material3 = "1.9.0"
 vanniktechMavenPublish = "0.37.0"
 kotlinxSerialization = "1.11.0"
 kotlinxCoroutines = "1.11.0"
-androidx-activity-compose = "1.13.0"
 slf4j = "2.0.18"
 classgraph = "4.8.181"
 
@@ -18,9 +16,7 @@ kotlinx-serialization-core = { module = "org.jetbrains.kotlinx:kotlinx-serializa
 kotlinx-serialization-json = { module = "org.jetbrains.kotlinx:kotlinx-serialization-json", version.ref = "kotlinxSerialization" }
 kotlinx-coroutines-core = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-core", version.ref = "kotlinxCoroutines" }
 kotlinx-coroutines-test = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-test", version.ref = "kotlinxCoroutines" }
-material3 = { module = "org.jetbrains.compose.material3:material3", version.ref = "material3" }
 scribe = { module = "com.rafambn:scribe", version = "0.7.0" }
-androidx-activity-compose = { module = "androidx.activity:activity-compose", version.ref = "androidx-activity-compose" }
 slf4j-api = { module = "org.slf4j:slf4j-api", version.ref = "slf4j" }
 classgraph = { module = "io.github.classgraph:classgraph", version.ref = "classgraph" }
 

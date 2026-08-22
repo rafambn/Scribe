@@ -82,6 +82,7 @@ abstract class Scribe {
     private val processingEnabled = MutableStateFlow(false)
     private val retiring = AtomicBoolean(false)
     private val ignitionRegistration = AtomicReference<(() -> Unit)?>(null)
+    private val ignitionRegistrationInFlight = AtomicBoolean(false)
     private val retirementCompleted = CompletableDeferred<Unit>()
     private val processorJob: Job by lazy {
         ownedScope.launch {
@@ -104,6 +105,9 @@ abstract class Scribe {
     val isProcessing: Boolean
         get() = processingEnabled.value
 
+    internal open fun registerIgnitionHandler(callback: (Throwable) -> Unit): () -> Unit =
+        registerGlobalIgnitionHandler(callback)
+
     /**
      * Starts or resumes delivery from this instance's private buffer.
      *
@@ -115,23 +119,38 @@ abstract class Scribe {
         require(configuredArchivists.isNotEmpty()) { "At least one archivist is required." }
         check(!retiring.load()) { "This Scribe has been retired." }
         val exceptionHandler = onIgnition
-        if (exceptionHandler != null && ignitionRegistration.load() == null) {
-            val uninstall = registerGlobalIgnitionHandler(exceptionHandler)
-            if (!ignitionRegistration.compareAndSet(null, uninstall)) {
-                uninstall()
-            }
-            if (retiring.load()) {
-                removeIgnitionRegistration()
+        if (exceptionHandler != null) {
+            while (ignitionRegistration.load() == null) {
                 check(!retiring.load()) { "This Scribe has been retired." }
+                if (!ignitionRegistrationInFlight.compareAndSet(false, true)) {
+                    continue
+                }
+
+                try {
+                    val uninstall = registerIgnitionHandler(exceptionHandler)
+                    if (ignitionRegistration.compareAndSet(null, uninstall)) {
+                        if (retiring.load()) {
+                            removeIgnitionRegistration()
+                            check(!retiring.load()) { "This Scribe has been retired." }
+                        }
+                    } else {
+                        uninstall()
+                    }
+                } finally {
+                    ignitionRegistrationInFlight.store(false)
+                }
             }
         }
 
         val processor = processorJob
+        check(!retiring.load()) { "This Scribe has been retired." }
         processingEnabled.value = true
+        check(!retiring.load()) { "This Scribe has been retired." }
         if (processor.isCompleted) {
             processingEnabled.value = false
             error("The Scribe processor has terminated and cannot be restarted.")
         }
+        check(!retiring.load()) { "This Scribe has been retired." }
     }
 
     /** Allows new entries to be accepted into the private buffer. */

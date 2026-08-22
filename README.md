@@ -145,8 +145,6 @@ The provider discovers the annotated backend once on the first SLF4J access and 
 
 See the [full documentation](https://scribe.rafambn.com/) for lifecycle controls, overflow behavior, margins, and SLF4J field mapping.
 
-An optional `onIgnition` callback observes uncaught failures through the platform's global error mechanism. It is registered on the first `hire()` and removed by `retire()`. In Node.js, Scribe observes `uncaughtExceptionMonitor` and preserves Node's normal termination policy; unhandled rejections are reported there only when the host's current `--unhandled-rejections` policy promotes them. `wasmWasi` has no portable global hook, so a Scribe configured with `onIgnition` must fail at `hire()`; leave it null there for normal logging.
-
 ## Performance
 
 Scribe is designed for high-throughput and thread-safe concurrent logging.
