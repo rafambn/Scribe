@@ -1,6 +1,7 @@
 import com.vanniktech.maven.publish.JavadocJar
 import com.vanniktech.maven.publish.KotlinMultiplatform
 import com.vanniktech.maven.publish.SourcesJar
+import org.jetbrains.kotlin.gradle.ExperimentalWasmDsl
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
 plugins {
@@ -11,8 +12,9 @@ plugins {
 }
 
 group = "com.rafambn"
-version = "0.6.0"
+version = "0.7.0"
 
+@OptIn(ExperimentalWasmDsl::class)
 kotlin {
     jvm {
         compilerOptions {
@@ -35,10 +37,38 @@ kotlin {
             jvmTarget.set(JvmTarget.JVM_11)
         }
     }
+    js {
+        browser()
+        nodejs {
+            testTask {
+                useMocha {
+                    timeout = "120s"
+                }
+            }
+        }
+    }
+    wasmJs {
+        browser()
+        nodejs()
+    }
+    wasmWasi {
+        nodejs()
+    }
+    androidNativeArm32()
+    androidNativeArm64()
+    androidNativeX86()
+    androidNativeX64()
     iosX64()
     iosArm64()
     iosSimulatorArm64()
+    tvosArm64()
+    tvosSimulatorArm64()
+    watchosArm32()
+    watchosArm64()
+    watchosDeviceArm64()
+    watchosSimulatorArm64()
     linuxX64()
+    linuxArm64()
     mingwX64()
     macosArm64()
 
@@ -51,6 +81,11 @@ kotlin {
 
         commonTest.dependencies {
             implementation(libs.kotlin.test)
+            implementation(libs.kotlinx.coroutines.test)
+        }
+
+        jvmTest.dependencies {
+            implementation(libs.mockk)
         }
     }
 }

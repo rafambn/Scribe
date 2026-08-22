@@ -184,7 +184,15 @@ object ApplicationScribe : Scribe() {
 ApplicationScribe.hire()
 ```
 
-`onIgnition` is read when processing is first hired, but handles uncaught
-exceptions at the platform level. Multiple runtimes should not independently
-claim this application-global hook. Archivist failures are reported by the
+`onIgnition` is registered on the first `hire()` and unregistered by `retire()`.
+Scribe keeps one internal platform dispatcher and fans each failure out once to
+every active callback; a callback failure does not prevent the remaining
+callbacks or the runtime's previous handler from observing it. Browser JS and
+wasmJs observe global errors and unhandled Promise rejections. Node uses only
+its uncaught-exception monitor, distinguishing `uncaughtException` from
+`unhandledRejection` through the monitor's `origin` argument, so it does not
+change Node's normal termination behavior. An unhandled rejection reaches the
+monitor only when the host's current `--unhandled-rejections` policy promotes
+it. wasmWasi has no portable global hook, so `hire()` rejects a non-null
+`onIgnition` with an explicit unsupported-operation error. Archivist failures are reported by the
 `onArchiveFailure` property defined by the implementation.

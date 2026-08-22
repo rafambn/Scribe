@@ -4,11 +4,13 @@
 
 Use the library from shared code in your Kotlin Multiplatform module:
 
+The published artifacts are available from Maven Central. Add the dependency to your shared source set:
+
 ```kotlin
 kotlin {
     sourceSets {
         commonMain.dependencies {
-            implementation("com.rafambn:scribe:0.6.0")
+            implementation("com.rafambn:scribe:0.7.0")
         }
     }
 }
@@ -105,6 +107,10 @@ AnalyticsScribe.hire()
 ```
 
 Dismissing `PaymentsScribe` pauses only its job and does not stop `AnalyticsScribe`.
+
+`onIgnition` observes global uncaught failures after the first `hire()` and is
+unregistered by `retire()`. wasmWasi has no portable global hook; configure
+`onIgnition = null` there or `hire()` reports an unsupported-operation error.
 
 The emitted event shape is the scroll map itself:
 

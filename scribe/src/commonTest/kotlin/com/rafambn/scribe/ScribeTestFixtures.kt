@@ -1,9 +1,11 @@
 package com.rafambn.scribe
 
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.channels.Channel
-import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonPrimitive
@@ -19,12 +21,14 @@ internal fun scribeWithScrollShelves(
     onArchivist: (archivist: Archivist, entry: Entry, error: Throwable) -> Unit = { _, _, _ -> },
     margins: Margin? = null,
     startProcessing: Boolean = true,
+    onIgnition: ((Throwable) -> Unit)? = null,
 ): Scribe {
     val configuredShelves = shelves.toList()
     val configuredImprint = imprint
     val configuredMargins = margins
     val configuredBufferCapacity = bufferCapacity
     val configuredBufferOverflow = bufferOverflow
+    val configuredOnIgnition = onIgnition
     return object : Scribe() {
         override val archivists: List<Archivist> = configuredShelves
         override val bufferCapacity: Int = configuredBufferCapacity
@@ -32,6 +36,7 @@ internal fun scribeWithScrollShelves(
         override val onArchiveFailure = onArchivist
         override val imprint: Map<String, JsonElement> = configuredImprint
         override val margins: Margin? = configuredMargins
+        override val onIgnition: ((Throwable) -> Unit)? = configuredOnIgnition
     }.also {
         if (startProcessing) it.hire()
     }
@@ -45,12 +50,14 @@ internal fun scribeWithArchivists(
     bufferOverflow: BufferOverflow = BufferOverflow.DROP_OLDEST,
     onArchivist: (archivist: Archivist, entry: Entry, error: Throwable) -> Unit = { _, _, _ -> },
     startProcessing: Boolean = true,
+    onIgnition: ((Throwable) -> Unit)? = null,
 ): Scribe {
     val configuredShelves = shelves
     val configuredImprint = imprint
     val configuredMargins = margins
     val configuredBufferCapacity = bufferCapacity
     val configuredBufferOverflow = bufferOverflow
+    val configuredOnIgnition = onIgnition
     return object : Scribe() {
         override val archivists: List<Archivist> = configuredShelves
         override val bufferCapacity: Int = configuredBufferCapacity
@@ -58,12 +65,17 @@ internal fun scribeWithArchivists(
         override val onArchiveFailure = onArchivist
         override val imprint: Map<String, JsonElement> = configuredImprint
         override val margins: Margin? = configuredMargins
+        override val onIgnition: ((Throwable) -> Unit)? = configuredOnIgnition
     }.also {
         if (startProcessing) it.hire()
     }
 }
 
-internal fun <T> runSuspend(block: suspend () -> T): T = runBlocking { block() }
+internal fun runSuspend(block: suspend () -> Unit) = runTest {
+    withContext(Dispatchers.Default.limitedParallelism(1)) {
+        block()
+    }
+}
 
 internal fun createScribeInHelperAndEmit(shelf: Archivist): Scribe {
     val scribe = scribeWithScrollShelves(shelf)
