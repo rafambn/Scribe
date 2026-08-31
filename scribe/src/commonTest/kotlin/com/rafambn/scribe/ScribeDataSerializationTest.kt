@@ -1,6 +1,7 @@
 package com.rafambn.scribe
 
-import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlin.test.Test
@@ -9,13 +10,13 @@ import kotlin.test.assertNull
 
 class ScribeDataSerializationTest {
     @Test
-    fun writeSerializable_stores_serializable_object_value() {
+    fun set_stores_serializable_object_value() {
         runSuspend {
             val shelf = RecordingShelf()
             val scribe = scribeWithScrollShelves(shelf)
             val scroll = scribe.newScroll()
 
-            scroll["meta"] = Json.encodeToJsonElement(GatewayMeta.serializer(), GatewayMeta(retries = 2))
+            scroll["meta"] = GatewayMeta(retries = 2)
             scroll.seal(scribe)
             shelf.awaitEvents(1)
             scribe.retire()
@@ -26,16 +27,16 @@ class ScribeDataSerializationTest {
     }
 
     @Test
-    fun write_helpers_store_json_safe_values() {
+    fun set_stores_json_safe_values() {
         runSuspend {
             val shelf = RecordingShelf()
             val scribe = scribeWithScrollShelves(shelf)
             val scroll = scribe.newScroll()
 
-            scroll["message"] = JsonPrimitive("accepted")
-            scroll["attempt"] = JsonPrimitive(3)
-            scroll["retry"] = JsonPrimitive(false)
-            scroll["meta"] = Json.encodeToJsonElement(GatewayMeta.serializer(), GatewayMeta(retries = 2))
+            scroll["message"] = "accepted"
+            scroll["attempt"] = 3
+            scroll["retry"] = false
+            scroll["meta"] = GatewayMeta(retries = 2)
             scroll.seal(scribe)
             shelf.awaitEvents(1)
             scribe.retire()
@@ -53,7 +54,7 @@ class ScribeDataSerializationTest {
             val scribe = scribeWithScrollShelves(RecordingShelf())
             val scroll = scribe.newScroll()
 
-            scroll["meta"] = Json.encodeToJsonElement(GatewayMeta.serializer(), GatewayMeta(retries = 2))
+            scroll["meta"] = GatewayMeta(retries = 2)
             assertEquals(JsonObject(mapOf("retries" to JsonPrimitive(2))), scroll["meta"])
         }
     }
@@ -64,8 +65,27 @@ class ScribeDataSerializationTest {
             val scribe = scribeWithScrollShelves(RecordingShelf())
             val scroll = scribe.newScroll()
 
-            scroll["latency_ms"] = JsonPrimitive(123)
+            scroll["latency_ms"] = 123
             assertEquals(JsonPrimitive(123), scroll["latency_ms"])
+        }
+    }
+
+    @Test
+    fun map_accepts_collections_and_null_values() {
+        runSuspend {
+            val scribe = scribeWithScrollShelves(RecordingShelf())
+            val scroll = scribe.newScroll()
+
+            scroll["gateways"] = listOf("stripe", "adyen")
+            scroll["metadata"] = mapOf("attempt" to 2)
+            scroll["missing"] = null
+
+            assertEquals(
+                JsonArray(listOf(JsonPrimitive("stripe"), JsonPrimitive("adyen"))),
+                scroll["gateways"],
+            )
+            assertEquals(JsonObject(mapOf("attempt" to JsonPrimitive(2))), scroll["metadata"])
+            assertEquals(JsonNull, scroll["missing"])
         }
     }
 

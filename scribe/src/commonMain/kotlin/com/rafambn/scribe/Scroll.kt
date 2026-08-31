@@ -1,12 +1,19 @@
 package com.rafambn.scribe
 
+import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.encodeToJsonElement
 import kotlin.uuid.ExperimentalUuidApi
 import kotlin.uuid.Uuid
 
 typealias Scroll = MutableMap<String, JsonElement>
+
+/** Encodes [value] as JSON before storing it in this scroll. */
+inline operator fun <reified T> Scroll.set(key: String, value: T) {
+    put(key, Json.encodeToJsonElement(value))
+}
 
 /** Immutable structured log emitted when a [Scroll] is sealed. */
 typealias Entry = Map<String, JsonElement>
