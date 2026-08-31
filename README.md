@@ -45,7 +45,7 @@ Add Scribe to your `commonMain` dependencies:
 kotlin {
     sourceSets {
         commonMain.dependencies {
-            implementation("com.rafambn:scribe:0.7.0")
+            implementation("com.rafambn:scribe:0.8.0")
         }
     }
 }
@@ -97,7 +97,7 @@ Each `Scribe` object has independent configuration and delivery lifecycle. A `Sc
 
 ## Supported targets
 
-Version 0.7.0 publishes the core `scribe` module for exactly these 22 targets:
+Version 0.8.0 publishes the core `scribe` module for exactly these 22 targets:
 
 - JVM: `jvm`, `android`
 - Web: `js`, `wasmJs`, `wasmWasi`
@@ -105,7 +105,10 @@ Version 0.7.0 publishes the core `scribe` module for exactly these 22 targets:
 - Apple: `iosArm64`, `iosSimulatorArm64`, `iosX64`, `macosArm64`, `tvosArm64`, `tvosSimulatorArm64`, `watchosArm32`, `watchosArm64`, `watchosDeviceArm64`, `watchosSimulatorArm64`
 - Other Native: `linuxArm64`, `linuxX64`, `mingwX64`
 
-The `js` and `wasmJs` targets support both browser and Node.js execution; `wasmWasi` is configured for Node.js. The project inherits Kotlin `2.4.10`, kotlinx.serialization `1.11.0`, and kotlinx.coroutines `1.11.0` runtime requirements. The `scribe-slf4j` module remains JVM-only.
+The `js` and `wasmJs` targets support both browser and Node.js execution; `wasmWasi` is configured
+for Node.js. The project inherits Kotlin `2.4.10`, kotlinx.serialization `1.11.0`, and
+kotlinx.coroutines `1.11.0` compile and runtime requirements. The `scribe-slf4j` module remains
+JVM-only.
 
 Both artifacts are consumed from Maven Central. Scribe does not publish an npm package; Kotlin/JS and Kotlin/Wasm consumers use the Gradle Multiplatform dependency above.
 
@@ -115,7 +118,7 @@ For JVM applications, add the SLF4J provider:
 
 ```kotlin
 dependencies {
-    implementation("com.rafambn:scribe-slf4j:0.7.0")
+    implementation("com.rafambn:scribe-slf4j:0.8.0")
 }
 ```
 
@@ -139,7 +142,12 @@ object AppScribe : Slf4jScribe() {
 }
 ```
 
-The provider discovers the annotated backend once on the first SLF4J access and registers a JVM shutdown hook. Intake starts open, so early calls accumulate in the private buffer; the application calls `AppScribe.hire()` when processing should begin. The shutdown hook retires the Scribe and drains accepted entries automatically. Initialization fails with a descriptive error when no backend is present, multiple backends are annotated, or the annotation is not placed on a Kotlin object extending `Slf4jScribe`.
+The provider discovers the annotated backend on the first SLF4J access and registers a JVM shutdown
+hook. Intake starts open, so early calls accumulate in the private buffer. The application calls
+`AppScribe.hire()` when processing should begin. The shutdown hook waits up to five seconds for
+accepted entries before allowing JVM shutdown to continue. Initialization fails with a descriptive
+error when no backend is present, multiple backends are annotated, or the annotation is not placed
+on a Kotlin object extending `Slf4jScribe`.
 
 `scribe-slf4j` is a standalone SLF4J provider. Do not include another provider such as `logback-classic` in the same runtime classpath.
 
@@ -149,6 +157,12 @@ See the [full documentation](https://scribe.rafambn.com/) for lifecycle controls
 
 Scribe is designed for high-throughput and thread-safe concurrent logging.
 
-The repository includes JVM throughput tests for concurrent in-memory ingestion and serialized file
-writing. Results depend on the machine, runtime, buffer configuration, and archivist implementation;
-run the tests in your target environment before using them for capacity planning.
+The separate `benchmarks` module measures sequential and concurrent in-memory ingestion plus JSON
+file writing without slowing the multiplatform correctness suite:
+
+```shell
+./gradlew :benchmarks:run
+```
+
+Results depend on the machine, runtime, buffer configuration, and archivist implementation. Run the
+benchmarks in your target environment before using them for capacity planning.

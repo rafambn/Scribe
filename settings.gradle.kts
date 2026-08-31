@@ -2,6 +2,7 @@ rootProject.name = "Scribe"
 
 include(":scribe")
 include(":scribe-slf4j")
+include(":benchmarks")
 include(":testServer")
 
 pluginManagement {

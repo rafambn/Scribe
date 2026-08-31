@@ -76,9 +76,10 @@ Calling `retire()` from an archivist or one of its child coroutines throws an
 `IllegalStateException` to avoid waiting on the processor from within its own job tree; request
 retirement from the application lifecycle owner instead.
 
-The JVM SLF4J provider registers a shutdown hook that calls `retire()` automatically. It does not
-call `hire()`: the application chooses when processing begins, while earlier SLF4J calls accumulate
-in the backend's private buffer.
+The JVM SLF4J provider registers a shutdown hook that calls `retire()` automatically. It waits up to
+the backend's configured `shutdownTimeout`, five seconds by default, then allows JVM shutdown to
+continue even if an archivist is stuck. It does not call `hire()`: the application chooses when
+processing begins, while earlier SLF4J calls accumulate in the backend's private buffer.
 
 ## Uncaught Exceptions
 

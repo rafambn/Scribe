@@ -16,3 +16,4 @@ testApp/openobserve/data
 .codex
 .gradle-user
 .gradle-local
+kotlin-js-store

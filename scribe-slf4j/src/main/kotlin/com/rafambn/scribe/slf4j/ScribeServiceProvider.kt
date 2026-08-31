@@ -19,6 +19,7 @@ class ScribeServiceProvider : SLF4JServiceProvider {
     override fun initialize() {
         check(!::scribe.isInitialized) { "Scribe SLF4J provider is already initialized." }
         val createdScribe = discoverScribe()
+        createdScribe.validateConfiguration()
         try {
             registerShutdownHook(createdScribe)
         } catch (error: Throwable) {
@@ -77,7 +78,7 @@ class ScribeServiceProvider : SLF4JServiceProvider {
 
     private fun registerShutdownHook(scribe: Slf4jScribe) {
         val hook = Thread(
-            { runBlocking { scribe.retire() } },
+            { runBlocking { scribe.retireForShutdown() } },
             "scribe-slf4j-shutdown",
         )
         Runtime.getRuntime().addShutdownHook(hook)

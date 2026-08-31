@@ -12,7 +12,7 @@ plugins {
 }
 
 group = "com.rafambn"
-version = "0.7.0"
+version = "0.8.0"
 
 @OptIn(ExperimentalWasmDsl::class)
 kotlin {
@@ -39,13 +39,7 @@ kotlin {
     }
     js {
         browser()
-        nodejs {
-            testTask {
-                useMocha {
-                    timeout = "120s"
-                }
-            }
-        }
+        nodejs()
     }
     wasmJs {
         browser()
@@ -74,9 +68,8 @@ kotlin {
 
     sourceSets {
         commonMain.dependencies {
-            implementation(libs.kotlinx.serialization.core)
-            implementation(libs.kotlinx.serialization.json)
-            implementation(libs.kotlinx.coroutines.core)
+            api(libs.kotlinx.serialization.json)
+            api(libs.kotlinx.coroutines.core)
         }
 
         commonTest.dependencies {

@@ -10,7 +10,7 @@ The published artifacts are available from Maven Central. Add the dependency to 
 kotlin {
     sourceSets {
         commonMain.dependencies {
-            implementation("com.rafambn:scribe:0.7.0")
+            implementation("com.rafambn:scribe:0.8.0")
         }
     }
 }

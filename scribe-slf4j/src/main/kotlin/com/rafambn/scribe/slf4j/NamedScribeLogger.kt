@@ -2,14 +2,16 @@ package com.rafambn.scribe.slf4j
 
 import org.slf4j.MDC
 import org.slf4j.Marker
+import org.slf4j.event.LoggingEvent
 import org.slf4j.event.Level
 import org.slf4j.helpers.AbstractLogger
+import org.slf4j.spi.LoggingEventAware
 
 /** Lightweight SLF4J adapter that preserves the name requested from LoggerFactory. */
 internal class NamedScribeLogger(
     private val loggerName: String,
     private val scribe: Slf4jScribe,
-) : AbstractLogger() {
+) : AbstractLogger(), LoggingEventAware {
     override fun getName(): String = loggerName
 
     override fun isTraceEnabled(): Boolean = isEnabled(Level.TRACE, null)
@@ -34,17 +36,33 @@ internal class NamedScribeLogger(
         level: Level,
         marker: Marker?,
         messagePattern: String?,
-        arguments: Array<out Any>?,
+        arguments: Array<out Any?>?,
         throwable: Throwable?,
     ) {
         scribe.dispatch(
             ScribeLoggingCall(
                 loggerName = loggerName,
                 level = level,
-                marker = marker,
+                markers = listOfNotNull(marker),
+                keyValuePairs = emptyList(),
                 messagePattern = messagePattern,
                 arguments = arguments,
                 throwable = throwable,
+                mdc = MDC.getCopyOfContextMap()?.toMap().orEmpty(),
+            ),
+        )
+    }
+
+    override fun log(event: LoggingEvent) {
+        scribe.dispatch(
+            ScribeLoggingCall(
+                loggerName = loggerName,
+                level = event.level,
+                markers = event.markers.orEmpty(),
+                keyValuePairs = event.keyValuePairs.orEmpty(),
+                messagePattern = event.message,
+                arguments = event.argumentArray,
+                throwable = event.throwable,
                 mdc = MDC.getCopyOfContextMap()?.toMap().orEmpty(),
             ),
         )

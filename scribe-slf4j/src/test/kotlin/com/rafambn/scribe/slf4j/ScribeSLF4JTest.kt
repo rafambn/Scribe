@@ -3,10 +3,13 @@ package com.rafambn.scribe.slf4j
 import com.rafambn.scribe.Archivist
 import com.rafambn.scribe.Entry
 import com.rafambn.scribe.seal
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonPrimitive
 import org.slf4j.LoggerFactory
 import org.slf4j.MDC
@@ -19,6 +22,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
+import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
 
 @ScribeBackend
@@ -78,7 +82,8 @@ class ScribeSLF4JTest {
             ScribeLoggingCall(
                 loggerName = "BufferedLogger",
                 level = Level.INFO,
-                marker = null,
+                markers = emptyList(),
+                keyValuePairs = emptyList(),
                 messagePattern = "before hire",
                 arguments = null,
                 throwable = null,
@@ -109,6 +114,79 @@ class ScribeSLF4JTest {
         assertEquals("INFO", (entry["level"] as JsonPrimitive).content)
         assertEquals("TestLogger", (entry["logger"] as JsonPrimitive).content)
         assertEquals("Hello SLF4J!", (entry["message"] as JsonPrimitive).content)
+    }
+
+    @Test
+    fun `fluent logging preserves key values and multiple markers`() = runBlocking {
+        val logger = LoggerFactory.getLogger("FluentLogger")
+        val firstMarker = MarkerFactory.getMarker("CHECKOUT")
+        val secondMarker = MarkerFactory.getMarker("PAYMENT")
+
+        logger.atInfo()
+            .addMarker(firstMarker)
+            .addMarker(secondMarker)
+            .addKeyValue("order_id", "order-42")
+            .addKeyValue("attempt", 2)
+            .addKeyValue("message", "must not replace the formatted message")
+            .log("Order {} accepted", 42)
+        awaitCapturedEntries(1)
+
+        val entry = TestScribeBackend.captured.single()
+        assertEquals(JsonPrimitive("Order 42 accepted"), entry["message"])
+        assertEquals(JsonPrimitive("order-42"), entry["order_id"])
+        assertEquals(JsonPrimitive(2), entry["attempt"])
+        assertEquals(JsonPrimitive("CHECKOUT"), entry["marker"])
+        assertEquals(
+            JsonArray(listOf(JsonPrimitive("CHECKOUT"), JsonPrimitive("PAYMENT"))),
+            entry["markers"],
+        )
+    }
+
+    @Test
+    fun `null message remains structured json null`() = runBlocking {
+        val logger = LoggerFactory.getLogger("NullMessageLogger")
+
+        logger.info(null as String?)
+        awaitCapturedEntries(1)
+
+        assertEquals(JsonNull, TestScribeBackend.captured.single()["message"])
+    }
+
+    @Test
+    fun `shutdown drain stops waiting after configured timeout`() = runBlocking {
+        val writeStarted = CompletableDeferred<Unit>()
+        val releaseWrite = CompletableDeferred<Unit>()
+        val backend = object : Slf4jScribe() {
+            override val archivists = listOf(
+                Archivist {
+                    writeStarted.complete(Unit)
+                    releaseWrite.await()
+                },
+            )
+            override val shutdownTimeout = 50.milliseconds
+        }
+
+        backend.hire()
+        backend.dispatch(
+            ScribeLoggingCall(
+                loggerName = "ShutdownLogger",
+                level = Level.INFO,
+                markers = emptyList(),
+                keyValuePairs = emptyList(),
+                messagePattern = "blocked",
+                arguments = null,
+                throwable = null,
+                mdc = emptyMap(),
+            ),
+        )
+        writeStarted.await()
+
+        withTimeout(1.seconds) {
+            assertFalse(backend.retireForShutdown())
+        }
+
+        releaseWrite.complete(Unit)
+        backend.retire()
     }
 
     @Test

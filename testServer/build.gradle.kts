@@ -9,8 +9,6 @@ kotlin {
 
 dependencies {
     implementation(project(":scribe-slf4j"))
-    implementation(libs.kotlinx.coroutines.core)
-    implementation(libs.kotlinx.serialization.json)
 }
 
 application {

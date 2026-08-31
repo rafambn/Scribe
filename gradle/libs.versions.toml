@@ -1,23 +1,22 @@
 [versions]
-agp = "9.3.1"
+agp = "9.3.2"
 kotlin = "2.4.10"
-compose-multiplatform = "1.11.1"
+compose-multiplatform = "1.12.0"
 android-minSdk = "24"
 android-compileSdk = "37"
 vanniktechMavenPublish = "0.37.0"
 kotlinxSerialization = "1.11.0"
 kotlinxCoroutines = "1.11.0"
 slf4j = "2.0.18"
-classgraph = "4.8.181"
+classgraph = "4.8.194"
 mockk = "1.14.11"
 
 [libraries]
 kotlin-test = { module = "org.jetbrains.kotlin:kotlin-test", version.ref = "kotlin" }
-kotlinx-serialization-core = { module = "org.jetbrains.kotlinx:kotlinx-serialization-core", version.ref = "kotlinxSerialization" }
 kotlinx-serialization-json = { module = "org.jetbrains.kotlinx:kotlinx-serialization-json", version.ref = "kotlinxSerialization" }
 kotlinx-coroutines-core = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-core", version.ref = "kotlinxCoroutines" }
 kotlinx-coroutines-test = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-test", version.ref = "kotlinxCoroutines" }
-scribe = { module = "com.rafambn:scribe", version = "0.7.0" }
+scribe = { module = "com.rafambn:scribe", version = "0.8.0" }
 slf4j-api = { module = "org.slf4j:slf4j-api", version.ref = "slf4j" }
 classgraph = { module = "io.github.classgraph:classgraph", version.ref = "classgraph" }
 mockk = { module = "io.mockk:mockk", version.ref = "mockk" }
