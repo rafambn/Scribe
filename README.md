@@ -7,13 +7,13 @@
 </p>
 
 <p align="center">
-  <a href="https://search.maven.org/search?q=g:com.rafambn%20AND%20a:scribe">
-    <img alt="Maven Central" src="https://img.shields.io/maven-central/v/com.rafambn/scribe?label=Maven%20Central">
-  </a>
-  <a href="./LICENSE">
-    <img alt="License" src="https://img.shields.io/badge/license-Apache%202.0-blue.svg">
-  </a>
-  <img alt="Platform Targets" src="https://img.shields.io/badge/targets-22-0A7EA4">
+  <a href="https://search.maven.org/search?q=g:com.rafambn%20AND%20a:scribe"><img alt="Maven Central" src="https://img.shields.io/maven-central/v/com.rafambn/scribe?label=Maven%20Central"></a>
+  <a href="./LICENSE"><img alt="License" src="https://img.shields.io/badge/license-Apache%202.0-blue.svg"></a>
+  <img alt="All KMP targets" src="https://img.shields.io/badge/KMP-all%20targets-0A7EA4">
+</p>
+
+<p align="center">
+  <img alt="Repository views" src="https://profile.rafambn.com/badge/rafambn/Scribe.svg">
 </p>
 
 <p align="center">
